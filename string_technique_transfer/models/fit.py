@@ -281,14 +281,39 @@ def _fit_m3_approx(df: pd.DataFrame, metric: str) -> FitResult:
         else grand,
         axis=1,
     )
+    # Wire pooling into the prediction surface: shrink each technique center toward grand
+    models = dict(base.params.get("models", {}))
+    tech_n = df.groupby("technique")["log_ratio"].count().to_dict()
+    for tech, m in models.items():
+        n_t = float(tech_n.get(tech, len(df)))
+        prec0 = 1.0 / (tau**2)
+        if m.get("type") == "constant":
+            mu = float(m["mu"])
+            m = dict(m)
+            m["mu"] = float((n_t * mu + prec0 * grand) / (n_t + prec0))
+            m["se"] = float(np.sqrt(m["se"] ** 2 + tau**2))
+            m["corpus_pooled"] = True
+            models[tech] = m
+        elif m.get("type") == "gam":
+            m = dict(m)
+            center = float(m.get("mu_center", grand))
+            m["mu_center"] = float((n_t * center + prec0 * grand) / (n_t + prec0))
+            m["resid_sd"] = float(np.sqrt(float(m.get("resid_sd", 0.2)) ** 2 + tau**2))
+            m["corpus_pooled"] = True
+            models[tech] = m
     base.model_id = "M3_hierarchical_bayes"
     base.backend = "hierarchical_approx_no_pymc"
+    base.params["models"] = models
     base.params["corpus_effects"] = corpus_effects
     base.params["tau_corpus"] = tau
+    base.params["grand_mean"] = grand
+    base.params["corpus_pooling_applied"] = True
+    base.params["transport_sd"] = max(float(base.params.get("transport_sd", 0.12)), tau)
     base.diagnostics["note"] = (
-        "PyMC/Bambi not installed; used hierarchical approximation. "
-        "Install optional bayes extras for full Bayesian GAM."
+        "Hierarchical approximation: M2 surface + technique centers pooled toward grand mean; "
+        "corpus_effects stored for audit. Install bayes extras for full Bambi/PyMC."
     )
+    base.diagnostics["corpus_pooling_applied"] = True
     return base
 
 
@@ -339,8 +364,7 @@ def _fit_m3_bambi(df: pd.DataFrame, metric: str, *, bmb, az) -> FitResult:
         if data["corpus_id"].nunique() > 1
         else 0.15
     )
-    # Point prediction uses the regularized M2 surface (stable on Windows).
-    # Bambi InferenceData is retained for posterior diagnostics / audit.
+    # Attach M2 as fallback surface; primary point predict tries Bambi posterior mean.
     m2 = _fit_m2(df, metric)
     return FitResult(
         model_id="M3_hierarchical_bayes",
@@ -356,7 +380,9 @@ def _fit_m3_bambi(df: pd.DataFrame, metric: str, *, bmb, az) -> FitResult:
             "midi_range": m2.params.get("midi_range", {}),
             "formula": formula,
             "data_columns": list(data.columns),
-            "point_predict": "M2_regularized_surface",
+            "point_predict": "bambi_posterior",
+            "train_dynamics": sorted(data["dynamic"].astype(str).unique().tolist()),
+            "train_techniques": sorted(data["technique"].astype(str).unique().tolist()),
         },
         diagnostics={
             "divergences": int(idata.sample_stats["diverging"].sum().item())
@@ -364,13 +390,71 @@ def _fit_m3_bambi(df: pd.DataFrame, metric: str, *, bmb, az) -> FitResult:
             else None,
             "transport_sd": max(transport_sd, 0.08),
             "formula": formula,
-            "point_predict": "M2_regularized_surface",
+            "point_predict": "bambi_posterior_with_m2_fallback",
             "note": (
-                "Full Bayes posterior stored in params['idata']; "
-                "y_pred uses attached regularized M2 models for numerical stability."
+                "y_pred prefers Bambi posterior mean of mu; "
+                "falls back to regularized M2 surface if predict() fails."
             ),
         },
     )
+
+
+def _bambi_posterior_effect(
+    fit: FitResult, technique: str, dynamic: str, midi: float
+) -> tuple[float, float, str] | None:
+    """Posterior mean/sd of mu from Bambi; None → caller should use M2 fallback."""
+    from ..acoustics import clip_log_effect
+
+    model = fit.params.get("model")
+    idata = fit.params.get("idata")
+    if model is None or idata is None:
+        return None
+    transport = float(fit.params.get("transport_sd", 0.18))
+    # Use a seen dynamic when possible (unseen levels break design matrices)
+    dyns = fit.params.get("train_dynamics") or []
+    dyn_use = str(dynamic)
+    if dyns and dyn_use not in dyns:
+        dyn_use = str(dyns[0])
+    new = pd.DataFrame(
+        {
+            "technique": [str(technique)],
+            "dynamic": [dyn_use],
+            "midi": [float(midi)],
+            "log_ratio": [0.0],
+            "corpus_id": ["__predict__"],
+            "se": [0.25],
+        }
+    )
+    try:
+        pred = model.predict(idata, data=new, inplace=False, kind="mean")
+        arr = None
+        post = getattr(pred, "posterior", None)
+        if post is not None:
+            for key in ("mu", "log_ratio_mean"):
+                if key in post:
+                    arr = np.asarray(post[key]).reshape(-1)
+                    break
+        if arr is None or arr.size == 0:
+            return None
+        mu = float(np.nanmean(arr))
+        se = float(np.nanstd(arr))
+        if not np.isfinite(mu):
+            return None
+        se = max(se, 0.05)
+        # Register flag from attached M2 midi range when available
+        m = (fit.params.get("models") or {}).get(technique) or {}
+        midi_min, midi_max = m.get("midi_min"), m.get("midi_max")
+        in_range = True
+        if midi_min is not None and midi_max is not None:
+            in_range = float(midi_min) <= float(midi) <= float(midi_max)
+        delta, _ = clip_log_effect(mu, technique)
+        se = float(np.sqrt(se**2 + transport**2))
+        if not in_range:
+            se = float(np.sqrt(se**2 + 0.15**2))
+            return delta, se, "bambi_posterior_register_extrapolation"
+        return delta, se, "bambi_posterior_mean"
+    except Exception:
+        return None
 
 
 def _effect_from_fit(fit: FitResult, technique: str, dynamic: str, midi: float) -> tuple[float, float, str]:
@@ -402,6 +486,15 @@ def _effect_from_fit(fit: FitResult, technique: str, dynamic: str, midi: float) 
             return 0.0, 1.0, "unsupported_technique"
         delta, _ = clip_log_effect(float(rows.iloc[0]["log_effect"]), technique)
         return delta, float(rows.iloc[0]["se"]), flag
+
+    # M3 full Bayes: try posterior mean before M2 fallback surface
+    if (
+        fit.backend == "bambi_pymc"
+        and fit.params.get("point_predict") == "bambi_posterior"
+    ):
+        bayes = _bambi_posterior_effect(fit, technique, dynamic, midi)
+        if bayes is not None:
+            return bayes
 
     models = fit.params.get("models", {})
     transport = float(fit.params.get("transport_sd", 0.18))
@@ -465,13 +558,26 @@ def predict_transfer(
     bridge_dynamics_by_technique: dict[str, list[str]] | None = None,
     max_dynamic_distance: int = 1,
     strict_dynamics: bool = True,
+    calibration: Any | None = None,
 ) -> pd.DataFrame:
     """Apply Y_hat = Y_ord * exp(delta) with support levels and acoustic clipping."""
     from ..acoustics import clip_log_effect
     from ..dynamics import MAX_ADEQUATE_DISTANCE, map_zenodo_dynamic_to_bridge
+    from ..validation.calibration import apply_conformal_halfwidth
 
     if max_dynamic_distance is None:
         max_dynamic_distance = MAX_ADEQUATE_DISTANCE
+
+    # Calibrated inflate constants (defaults match legacy behaviour)
+    inf_dyn = 0.25
+    inf_reg = 0.12
+    inf_out = 0.20
+    se_scale = 1.0
+    if calibration is not None and getattr(calibration, "status", None) == "ok":
+        inf_dyn = float(calibration.inflate_dynamic)
+        inf_reg = float(calibration.inflate_register)
+        inf_out = float(calibration.inflate_outlier)
+        se_scale = float(calibration.scale_factor)
 
     tgt = target_ordinario.copy()
     tgt = tgt.dropna(subset=["value", "midi"])
@@ -488,6 +594,16 @@ def predict_transfer(
     else:
         med = float(tgt["value"].median())
         outlier_cut["*"] = max(float(tgt["value"].quantile(0.95)), 3.0 * med)
+
+    supported_flags = {
+        "robust_constant",
+        "interpolation",
+        "global_factor",
+        "register_dynamic",
+        "dynamic_only",
+        "technique_pooled",
+        "bambi_posterior_mean",
+    }
 
     rows = []
     for tech in techniques:
@@ -514,12 +630,13 @@ def predict_transfer(
             delta, se, model_flag = _effect_from_fit(fit, tech, effect_dyn, float(r["midi"]))
             delta, clipped = clip_log_effect(delta, tech)
 
-            # Inflate uncertainty for weaker support
+            # Inflate uncertainty for weaker support (calibrated when available)
             if not dyn_ok:
-                se = float(np.sqrt(se**2 + 0.25**2))
+                se = float(np.sqrt(se**2 + inf_dyn**2))
             if "register_extrapolation" in model_flag:
-                se = float(np.sqrt(se**2 + 0.12**2))
+                se = float(np.sqrt(se**2 + inf_reg**2))
             se = float(np.sqrt(se**2 + transport_se_extra**2))
+            se = float(se * se_scale)
 
             lo, hi = r.get("ci_low"), r.get("ci_high")
             if pd.notna(lo) and pd.notna(hi) and lo > 0 and hi > 0:
@@ -530,9 +647,9 @@ def predict_transfer(
             cut = outlier_cut.get(coll, outlier_cut.get("*", np.inf))
             is_outlier = bool(y0 > cut)
 
-            if dyn_ok and model_flag in {"robust_constant", "interpolation", "global_factor", "register_dynamic", "dynamic_only", "technique_pooled"}:
+            if dyn_ok and model_flag in supported_flags:
                 support_level = "supported"
-            elif dyn_ok and model_flag == "register_extrapolation":
+            elif dyn_ok and "register_extrapolation" in model_flag:
                 support_level = "extrapolated_register"
             elif not dyn_ok:
                 support_level = "extrapolated_dynamic"
@@ -540,7 +657,7 @@ def predict_transfer(
                 support_level = "extrapolated"
 
             if is_outlier:
-                se = float(np.sqrt(se**2 + 0.20**2))
+                se = float(np.sqrt(se**2 + inf_out**2))
                 support_level = (
                     "supported_outlier_target"
                     if support_level == "supported"
@@ -548,6 +665,7 @@ def predict_transfer(
                 )
 
             yhat = y0 * np.exp(delta)
+            half = apply_conformal_halfwidth(se, calibration)
             rows.append(
                 {
                     "instrument": r.get("instrument"),
@@ -567,9 +685,10 @@ def predict_transfer(
                     "factor": float(np.exp(delta)),
                     "factor_clipped": clipped,
                     "y_pred": float(yhat),
-                    "y_pred_lo95": float(yhat * np.exp(-1.96 * se)),
-                    "y_pred_hi95": float(yhat * np.exp(1.96 * se)),
+                    "y_pred_lo95": float(yhat * np.exp(-half)),
+                    "y_pred_hi95": float(yhat * np.exp(half)),
                     "combined_se_log": se,
+                    "interval_halfwidth_log": half,
                     "model_flag": model_flag,
                     "support_level": support_level,
                     "support_flag": f"{model_flag}|{dyn_flag}",

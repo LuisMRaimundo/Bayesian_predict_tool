@@ -13,6 +13,18 @@ stackedit: Open this file in https://stackedit.io (Markdown + KaTeX)
 **Local folder:** `C:\Users\lmr20\Desktop\Bayesian Tool`  
 **How to view equations:** open this file in [StackEdit](https://stackedit.io) (File → Open from disk). All mathematics uses standard LaTeX delimiters (`$$ … $$`, `$…$`).
 
+### v1.2 upgrades (implemented)
+
+- **M3 posterior prediction:** Bambi `predict(..., kind="mean")` on $\mu$; M2 fallback if predict fails.  
+- **Calibration:** blocked-CV residual scale + conformal $q_{95}$ half-widths (`validation/calibration.py`).  
+- **Model comparison:** M0–M3 blocked CV + `recommended_model` (`validation/compare.py`).  
+- **Holdout pack:** random MIDI holdout + optional external measured scorer (`validation/holdout.py`).  
+- **Corpus pooling:** applied to M3-approx technique centers (`_fit_m3_approx`).  
+- **Sensitivity:** winsor × acoustic-prior grid (`validation/sensitivity.py`).  
+- **Bridge helper:** `bridge_build.py`.  
+- **CI:** `.github/workflows/ci.yml` + `examples/smoke_transfer.py`.  
+- **Literature:** `LITERATURE_ALIGNMENT.md` (soft priors only; mute $A(f)$ not a universal EWSD law).
+
 ---
 
 ## Contents

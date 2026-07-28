@@ -1,4 +1,14 @@
-"""Acoustic plausibility priors and soft constraints for technique transfer."""
+r"""Acoustic plausibility priors and soft constraints for technique transfer.
+
+Aligned with the STE literature layer (Desktop Extrapolação repo):
+- Peer-reviewed sources do **not** activate universal EWSD technique coefficients.
+- Mute physics is frequency-dependent, S_muted(f)=S_ord(f)*A_{m,i}(f);
+  this tool uses a **scalar log-ratio** approximation on a density metric.
+- dB / loudness / bridge-mobility figures are **not** density multipliers.
+- Heavy practice mutes are out of scope (performance con sordino only).
+- Priors below are wide soft constraints + direction hints, overwritten by bridge data.
+See LITERATURE_ALIGNMENT.md in this package root.
+"""
 
 from __future__ import annotations
 

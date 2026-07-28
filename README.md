@@ -5,7 +5,8 @@ Local research tool for **instrument-agnostic** technique transfer of spectral-d
 **Local folder only — not a GitHub project.**
 
 See [METHODOLOGY.md](METHODOLOGY.md) for the scientific protocol.  
-Full math / algorithms / code-line map + tutorial: **[TECHNICAL_MANUAL.md](TECHNICAL_MANUAL.md)** (open in [StackEdit](https://stackedit.io); LaTeX twin in `docs/TECHNICAL_MANUAL.tex`).
+Full math / algorithms / code-line map + tutorial: **[TECHNICAL_MANUAL.md](TECHNICAL_MANUAL.md)** (open in [StackEdit](https://stackedit.io); LaTeX twin in `docs/TECHNICAL_MANUAL.tex`).  
+Reproduce: [REPRODUCE.md](REPRODUCE.md) · Literature priors: [LITERATURE_ALIGNMENT.md](LITERATURE_ALIGNMENT.md)
 
 ## Quick start (GUI)
 
@@ -34,11 +35,11 @@ python -m string_technique_transfer.cli --bridge ... --target ... --preflight-on
 
 ## Robustness features
 
-- Zenodo triad awareness (`pp/mf/ff`) with tight adequate-dynamic map  
-- Winsorize + acoustic shrink/clip  
-- No spline extrapolation outside bridge MIDI  
-- Preflight gate + blocked pitch-region CV  
-- Excel sheets: `Preflight`, `Quality_report`, `Blocked_CV`, `Predictions_supported`, `Predictions_all`
+- Zenodo **MEDIA** target (`Violin_Media` M/N/O) + ORCH/IOWA sheets  
+- Strict dynamics map; winsorize + soft acoustic shrink/clip (literature-aligned, not activated EWSD laws)  
+- M0–M3 comparison, blocked CV, residual/conformal **calibration**, holdout pack, sensitivity grid  
+- M3: Bambi posterior mean when available, else hierarchical approx with corpus pooling  
+- Excel: `Predictions_supported!y_pred` + `Model_comparison` / `Calibration` / `Holdout_*` / `Sensitivity`
 
 ## Tests
 

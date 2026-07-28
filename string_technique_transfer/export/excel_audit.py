@@ -68,6 +68,11 @@ def export_audit_workbook(
     cv_table: pd.DataFrame | None = None,
     config: dict | None = None,
     audit: dict | None = None,
+    model_comparison: pd.DataFrame | None = None,
+    calibration: pd.DataFrame | None = None,
+    holdout_summary: pd.DataFrame | None = None,
+    holdout_detail: pd.DataFrame | None = None,
+    sensitivity: pd.DataFrame | None = None,
 ) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -130,6 +135,16 @@ def export_audit_workbook(
             quality_report.to_excel(xl, sheet_name="Quality_report", index=False)
         if cv_table is not None:
             cv_table.to_excel(xl, sheet_name="Blocked_CV", index=False)
+        if model_comparison is not None and len(model_comparison):
+            model_comparison.to_excel(xl, sheet_name="Model_comparison", index=False)
+        if calibration is not None and len(calibration):
+            calibration.to_excel(xl, sheet_name="Calibration", index=False)
+        if holdout_summary is not None and len(holdout_summary):
+            holdout_summary.to_excel(xl, sheet_name="Holdout_summary", index=False)
+        if holdout_detail is not None and len(holdout_detail):
+            holdout_detail.to_excel(xl, sheet_name="Holdout_detail", index=False)
+        if sensitivity is not None and len(sensitivity):
+            sensitivity.to_excel(xl, sheet_name="Sensitivity", index=False)
         if audit:
             pd.DataFrame([audit]).to_excel(xl, sheet_name="Audit", index=False)
         bridge.to_excel(xl, sheet_name="Bridge_log_ratios", index=False)
@@ -157,11 +172,16 @@ def export_audit_workbook(
                 {
                     "USE_THIS": f"{file_name} / {PRIMARY_SHEET} / {PRIMARY_COLUMN}",
                     "formula_prediction": "y_pred = y_ordinario * exp(log_effect)",
-                    "formula_interval": "y_pred * exp(+/-1.96 * combined_se_log)",
+                    "formula_interval": "y_pred * exp(+/- calibrated_halfwidth_log)",
                     "dynamic_policy": "Supported only for adequate pairs: pp<->{pp,p}, mf<->{mf,mp}, ff<->{ff,f}.",
-                    "acoustic_policy": "Winsorize + shrink toward technique priors + clip plausible factor bounds.",
+                    "acoustic_policy": (
+                        "Soft literature-aligned priors (not activated EWSD laws) + winsor + shrink + clip. "
+                        "Mute is frequency-dependent; scalar log-ratio is an approximation."
+                    ),
                     "register_policy": "Outside bridge MIDI: shrunk global effect, not spline extrapolation.",
-                    "validation": "Blocked pitch-region CV metrics in Blocked_CV sheet.",
+                    "validation": (
+                        "Blocked_CV + Model_comparison + Calibration + Holdout_* + Sensitivity sheets."
+                    ),
                 }
             ]
         ).to_excel(xl, sheet_name="Formulas", index=False)

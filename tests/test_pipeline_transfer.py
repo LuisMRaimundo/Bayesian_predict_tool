@@ -76,7 +76,15 @@ def _synth_target():
 def test_preflight_and_supported_only_ff():
     bridge = _synth_bridge()
     target = _synth_target()
-    cfg = TransferConfig(strict_dynamics=True, model_id="M2_midi_gam", run_blocked_cv=True)
+    cfg = TransferConfig(
+        strict_dynamics=True,
+        model_id="M2_midi_gam",
+        run_blocked_cv=True,
+        run_model_comparison=False,
+        run_calibration=False,
+        run_holdout=False,
+        run_sensitivity=False,
+    )
     pf = preflight_transfer(bridge, target, cfg)
     assert pf.ok
     assert "ff" in pf.summary.get("supported_zenodo[con_sordino]", "")
