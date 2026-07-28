@@ -31,11 +31,13 @@ python -m string_technique_transfer.cli ^
   --bridge data\violin_bridge_panel.csv ^
   --target "C:\Users\lmr20\Desktop\VIOLIN_Zenodo_collections_Arco_normal.xlsx" ^
   --zenodo-collection MEDIA ^
-  --model M2_midi_gam ^
+  --model M1_register_dynamic ^
+  --allow-cross-collection ^
   --out outputs\transfer_audit.xlsx
 ```
 
-Or GUI: `python run_gui.py` → collection **MEDIA** → Fit & predict.
+Philharmonia-style bridges (ordinario vs technique in different folders) need `--allow-cross-collection`; every pair is a `transport_prior`.  
+Or GUI: `python run_gui.py` → collection **MEDIA** → model **M1** → enable cross-collection if needed → Fit & predict.
 
 ## 4. What to open
 
@@ -50,4 +52,4 @@ Also inspect: `Model_comparison`, `Calibration`, `Holdout_summary`, `Blocked_CV`
 ## 5. Scientific constraints
 
 See `LITERATURE_ALIGNMENT.md` — soft priors only; no activated universal EWSD mute law from literature.  
-See **`AUDIT_RESPONSE.md`** for audit defects, what was fixed in v0.3, and what remains before publication-grade extrapolations.
+See **`AUDIT_RESPONSE.md`** (including the re-audit) for what was fixed, recommended M1/M0/M2 use, and what remains before publication-grade extrapolations.

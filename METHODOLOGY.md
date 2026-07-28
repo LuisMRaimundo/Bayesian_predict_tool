@@ -31,10 +31,10 @@ Example: bridge sordina **forte** supports only Zenodo **ff**.
 
 1. **Preflight** — verify ordinario+technique presence, bridge pairs, supported Zenodo dynamics.
 2. **Bridge log-ratios** — pair by instrument/MIDI; nearest adequate dynamic only; winsorize; shrink toward acoustic priors.
-3. **Model** — default **M2** regularized robust transfer (constant for thin designs; mild MIDI smooth otherwise).
-4. **Predict** — clip to technique-plausible factor bounds; inflate SE for register/dynamic extrapolation; flag target outliers.
-5. **Support split** — `Predictions_supported` vs `Predictions_all`.
-6. **Blocked pitch CV** — leave contiguous MIDI blocks out; report MAE/RMSE on log-ratio and MAPE on factors.
+3. **Model** — default **M1** register–dynamic (exploratory); **M0** baseline; **M2** optional pitch-smoothing. Do not use M3 approx for final tables.
+4. **Predict** — clip to technique-plausible factor bounds; inflate SE for register/dynamic extrapolation / unspecified bridge dynamics; flag target outliers. Intervals are heuristic predictive, not Bayesian credible.
+5. **Support split** — `Predictions_supported` vs `Predictions_all` (unspecified-dynamic techniques → dynamic extrapolation).
+6. **Blocked pitch CV** — winsorize inside training folds; report MAE/RMSE on log-ratio and MAPE on factors.
 
 ## Acoustic priors (soft)
 

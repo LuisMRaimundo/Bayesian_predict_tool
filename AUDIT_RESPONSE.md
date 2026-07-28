@@ -1,6 +1,6 @@
 # Audit response — scientific defects and corrections
 
-This document tracks the external audit (ZIP ≡ `76b7cc4`) and the **re-audit** of commit `6f3c3dc` / follow-ups.
+This document tracks the external audit (ZIP ≡ `76b7cc4`) and the **re-audit** of commit `6f3c3dc`, with CI/docs follow-up at `e13b2d4` and later.
 
 ## Classification (current)
 

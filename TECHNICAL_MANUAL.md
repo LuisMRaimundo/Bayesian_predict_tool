@@ -86,14 +86,14 @@ Here $c$ indexes a pitch (MIDI / note), $t$ a technique, and $Y$ is the metric (
 |---|---|---|
 | **Bridge** | Paired ordinario + special technique | `sordina_forte.xlsx` + `Arco_Normal_forte.xlsx` |
 | **Target ordinario** | Curve to transport onto | `VIOLIN_Zenodo_collections_Arco_normal.xlsx` with source **MEDIA** |
-| **Model** | How $\delta$ varies with pitch/dynamic | Prefer **M2** |
+| **Model** | How $\delta$ varies with pitch/dynamic | Prefer **M1** (exploratory); M0 baseline; M2 secondary |
 
 ### 1.4 Recommended workflow (GUI)
 
 1. Run `python run_gui.py` from the tool folder.  
 2. Add bridge files (ordinario + special techniques).  
 3. Choose Zenodo workbook; set collection to **MEDIA** (reads `Violin_Media` columns **M/N/O** = Media pp/mf/**ff**).  
-4. Keep **Strict dynamics** ON; model **M2**.  
+4. Keep **Strict dynamics** ON; model **M1**. For Philharmonia-style multi-folder bridges, allow cross-collection transport (pairs labelled `transport_prior`).  
 5. Click **Preflight**, then **Fit & predict**.  
 6. Open the Excel audit and use:
 
@@ -103,7 +103,8 @@ Here $c$ indexes a pitch (MIDI / note), $t$ a technique, and $Y$ is the metric (
 | 2 | **Page** | `Predictions_supported` |
 | 3 | **Column** | `y_pred` (yellow) |
 
-7. Open the illustrated history HTML path printed by the GUI (under `outputs/run_history/…/RUN_REPORT.html`).
+7. Open the illustrated history HTML path printed by the GUI (under `outputs/run_history/…/RUN_REPORT.html`).  
+8. See **`AUDIT_RESPONSE.md`** — exploratory transport tool, not publication-grade hierarchical Bayes.
 
 ### 1.5 CLI quick start
 
@@ -113,7 +114,8 @@ python -m string_technique_transfer.cli ^
   --bridge data\violin_bridge_panel.csv ^
   --target "C:\Users\lmr20\Desktop\VIOLIN_Zenodo_collections_Arco_normal.xlsx" ^
   --zenodo-collection MEDIA ^
-  --model M2_midi_gam ^
+  --model M1_register_dynamic ^
+  --allow-cross-collection ^
   --out outputs\transfer_audit.xlsx
 ```
 
@@ -432,7 +434,7 @@ $$
 
 ---
 
-### 7.3 M2 — Regularized MIDI transfer (**recommended**)
+### 7.3 M2 — Regularized MIDI transfer (secondary / pitch-smoothing)
 
 **Function:** `_fit_m2` — **lines 115–236**  
 **Backend:** `regularized_robust_transfer`  
@@ -695,7 +697,7 @@ Performed against the implementation in this repository (manual v1.1).
 1. **M3 corpus pooled means** are audit statistics; prediction uses M2 surface.  
 2. **Full Bambi M3** stores posterior for diagnostics; **point `y_pred` uses attached M2 models** (stability on Windows / thin designs).  
 3. **M1 SE formula** is a heuristic precision weight, not a full Bayesian posterior SD.  
-4. **Per-row shrink** in the bridge uses $n_{\mathrm{eff}}=1$; M2 center shrink uses $n_{\mathrm{eff}}=n_t$.  
+4. **Per-row acoustic shrink is removed** from the bridge; coefficient-level shrink (if enabled) uses $n_{\mathrm{eff}}=n_t$.  
 5. Predictions remain **model-derived synthetics**, even when `supported`.
 
 ### 11.3 Fix included in v1.1
@@ -708,7 +710,7 @@ Previously, a successful Bambi fit did **not** attach a `models` dict, so `_effe
 ## 12. What to publish
 
 1. Sheet **`Predictions_supported`**, column **`y_pred`**.  
-2. Report: model id (usually M2), bridge $n$, techniques/dynamics, MIDI range, transport-prior fraction, blocked-CV MAE/RMSE.  
+2. Report: model id (usually M1), bridge $n$, techniques/dynamics, MIDI range, transport-prior fraction, blocked-CV MAE/RMSE / factor MAPE; state that intervals are heuristic.  
 3. State clearly: *model-derived synthetic / transport prior*, not measured collection data.  
 4. Prefer Zenodo **MEDIA** (`Violin_Media!O` for ff) when comparing to averaged IOWA–ORCH baselines.
 
