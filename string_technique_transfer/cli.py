@@ -102,9 +102,37 @@ def main(argv: list[str] | None = None) -> int:
         strict_dynamics=not args.no_strict_dynamics,
         run_blocked_cv=not args.no_cv,
     )
+    run_meta = {
+        "kind": "preflight" if args.preflight_only else "transfer",
+        "bridge_paths": list(args.bridge),
+        "target_path": args.target,
+        "instrument": args.instrument,
+        "zenodo_collection": args.zenodo_collection,
+    }
     pf = preflight_transfer(bridge_panel, target, cfg)
     print(pf.as_dataframe().to_string(index=False))
     if args.preflight_only:
+        from .run_history import finalize_run, log_operation, start_run
+
+        rec = start_run(
+            kind="preflight",
+            bridge_paths=list(args.bridge),
+            target_path=args.target,
+            config=cfg.to_dict(),
+            instrument=args.instrument,
+            zenodo_collection=args.zenodo_collection,
+        )
+        log_operation(rec, "preflight", {"ok": pf.ok})
+        report = finalize_run(
+            rec,
+            status="ok" if pf.ok else "preflight_fail",
+            bridge_panel=bridge_panel,
+            target=target,
+            preflight_df=pf.as_dataframe(),
+            errors=pf.errors,
+            warnings=pf.warnings,
+        )
+        print(f"Run history: {report}")
         return 0 if pf.ok else 2
     if not pf.ok:
         print("Preflight FAILED — aborting.")
@@ -116,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
         config=cfg,
         output_xlsx=args.out,
         skip_preflight=True,
+        run_meta=run_meta,
     )
     print(fit.summary_text())
     print(summarize_factors(bridge).to_string(index=False))
@@ -132,6 +161,8 @@ def main(argv: list[str] | None = None) -> int:
         n_sup = int(preds["support_level"].isin(["supported", "supported_outlier_target"]).sum())
         print(f"supported={n_sup} / all={len(preds)}")
     print(f"wrote {out}")
+    if fit.diagnostics.get("run_history_report"):
+        print(f"Run history: {fit.diagnostics['run_history_report']}")
     return 0
 
 

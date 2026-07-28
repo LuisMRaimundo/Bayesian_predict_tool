@@ -47,7 +47,31 @@ def build_log_ratios(
             "(e.g. sordina_*, *ponticello*, tasto, harmonics)."
         )
 
+    def _pick_ordinario_dynamic(tech_dyn: str, avail: list[str]) -> tuple[str, str, float | None] | None:
+        """Choose an ordinario dynamic for a technique row under the adequacy policy."""
+        avail = [str(a).lower() for a in avail if str(a).lower() not in {"", "nan", "none"}]
+        if not avail:
+            return None
+        td = str(tech_dyn).strip().lower()
+        # Folder stems like tasto.xlsx often lack a dynamic label.
+        # Pair with available ordinario at the same MIDI; prefer quieter levels first
+        # (common for sul tasto / sordina research folders), then mf.
+        if td in {"unspecified", "unknown", "nan"}:
+            for cand in ("pp", "p", "mp", "mf", "f", "ff"):
+                if cand in avail:
+                    return cand, f"technique_dynamic_unspecified->{cand}", 0.0
+            return avail[0], f"technique_dynamic_unspecified->{avail[0]}", 0.0
+        if td in avail:
+            return td, "dynamic_exact", 0.0
+        adequate = [d for d in avail if is_adequate_dynamic_pair(td, d, max_dynamic_distance)]
+        if not adequate:
+            return None
+        dyn_used, dyn_flag, dyn_dist = nearest_dynamic(td, adequate)
+        return dyn_used, dyn_flag, dyn_dist
+
     rows = []
+    n_skip_no_midi = 0
+    n_skip_dyn = 0
     for _, r in tech_df.iterrows():
         base = ord_df[(ord_df["instrument"] == r["instrument"]) & (ord_df["midi"] == r["midi"])]
         if require_same_collection:
@@ -56,35 +80,41 @@ def build_log_ratios(
             base_strict = base
 
         support = "paired_same_collection"
-        paired = base_strict[base_strict["dynamic"] == r["dynamic"]]
-        dyn_used = str(r["dynamic"])
-        dyn_flag = "dynamic_exact"
-        dyn_dist = 0.0
+        tech_dyn = str(r.get("dynamic", "unspecified"))
+        paired = pd.DataFrame()
+        dyn_used, dyn_flag, dyn_dist = tech_dyn, "dynamic_exact", 0.0
 
-        if paired.empty and not base_strict.empty:
+        if not base_strict.empty:
             avail = base_strict["dynamic"].dropna().astype(str).unique().tolist()
-            # keep only adequate dynamics
-            adequate = [d for d in avail if is_adequate_dynamic_pair(str(r["dynamic"]), d, max_dynamic_distance)]
-            pool = adequate if adequate else []
-            if pool:
-                dyn_used, dyn_flag, dyn_dist = nearest_dynamic(str(r["dynamic"]), pool)
-                paired = base_strict[base_strict["dynamic"] == dyn_used]
-                support = "nearest_dynamic_ordinario"
+            pick = _pick_ordinario_dynamic(tech_dyn, avail)
+            if pick is not None:
+                dyn_used, dyn_flag, dyn_dist = pick
+                paired = base_strict[base_strict["dynamic"].astype(str).str.lower() == str(dyn_used).lower()]
+                if "unspecified" in dyn_flag:
+                    support = "unspecified_technique_dynamic"
+                elif dyn_flag != "dynamic_exact":
+                    support = "nearest_dynamic_ordinario"
             else:
-                paired = pd.DataFrame()
+                n_skip_dyn += 1
 
         if paired.empty:
-            # relax collection, still require adequate dynamic distance
+            # relax collection, still require adequate / unspecified policy
             loose = ord_df[(ord_df["instrument"] == r["instrument"]) & (ord_df["midi"] == r["midi"])]
             if loose.empty:
+                n_skip_no_midi += 1
                 continue
             avail = loose["dynamic"].dropna().astype(str).unique().tolist()
-            adequate = [d for d in avail if is_adequate_dynamic_pair(str(r["dynamic"]), d, max_dynamic_distance)]
-            if not adequate:
-                continue  # skip acoustically inadequate pairings
-            dyn_used, dyn_flag, dyn_dist = nearest_dynamic(str(r["dynamic"]), adequate)
-            paired = loose[loose["dynamic"] == dyn_used]
-            support = "pooled_ordinario_same_instrument"
+            pick = _pick_ordinario_dynamic(tech_dyn, avail)
+            if pick is None:
+                n_skip_dyn += 1
+                continue
+            dyn_used, dyn_flag, dyn_dist = pick
+            paired = loose[loose["dynamic"].astype(str).str.lower() == str(dyn_used).lower()]
+            support = (
+                "pooled_unspecified_technique_dynamic"
+                if "unspecified" in dyn_flag
+                else "pooled_ordinario_same_instrument"
+            )
 
         if paired.empty:
             continue
@@ -112,13 +142,16 @@ def build_log_ratios(
             se_obs = np.nan
 
         log_ratio = float(np.log(y_t / y_ord))
+        # Label bridge row with the matched ordinario dynamic so Zenodo support mapping works
+        # (tasto.xlsx had dynamic=unspecified).
         rows.append(
             {
                 "instrument": r["instrument"],
                 "bridge_collection": r["collection"],
                 "corpus_id": r["corpus_id"],
                 "technique": r["technique"],
-                "dynamic": r["dynamic"],
+                "dynamic": dyn_used,
+                "technique_dynamic_raw": tech_dyn,
                 "ordinario_dynamic_used": dyn_used,
                 "dynamic_match": dyn_flag,
                 "dynamic_distance": dyn_dist if dyn_dist is not None else np.nan,
@@ -133,16 +166,25 @@ def build_log_ratios(
                 "factor": float(y_t / y_ord),
                 "se_log_obs": se_obs,
                 "support_flag": support,
-                "is_transport_prior": support != "paired_same_collection",
+                "is_transport_prior": support
+                not in {"paired_same_collection", "unspecified_technique_dynamic"},
             }
         )
 
     out = pd.DataFrame(rows)
     if out.empty:
+        tech_dyns = sorted(tech_df["dynamic"].dropna().astype(str).unique().tolist())
+        ord_dyns = sorted(ord_df["dynamic"].dropna().astype(str).unique().tolist())
         raise ValueError(
             "No usable bridge log-ratios could be formed under the adequate-dynamic policy.\n"
             "Need overlapping MIDI with ordinario at a nearby dynamic "
-            f"(max distance {max_dynamic_distance} on pp<p<mp<mf<f<ff)."
+            f"(max distance {max_dynamic_distance} on pp<p<mp<mf<f<ff).\n"
+            f"Special-technique dynamics found: {tech_dyns}\n"
+            f"Ordinario dynamics found: {ord_dyns}\n"
+            f"Skipped (no MIDI match)={n_skip_no_midi}, skipped (inadequate dynamic)={n_skip_dyn}.\n"
+            "Tip: if the special-technique file has no dynamic in the name (e.g. tasto.xlsx), "
+            "the tool now maps unspecified→available ordinario (pp/p/…); "
+            "also ensure ordinario workbooks share notes with the technique file."
         )
 
     # Winsorize per technique, then shrink toward acoustic prior

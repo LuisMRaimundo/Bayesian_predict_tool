@@ -157,13 +157,14 @@ class STTApp(ttk.Frame):
         self.log = tk.Text(right, wrap="word", height=30, font=("Consolas", 9))
         self.log.pack(fill="both", expand=True)
         self._log(
-            "Local tool — not a GitHub project.\n"
+            "String Technique Transfer (GitHub: Bayesian_predict_tool).\n"
             "1) Add bridge files (ordinario + special techniques).\n"
-            "2) Choose Zenodo workbook + collection (ORCH/IOWA/BOTH).\n"
-            "3) Click Preflight (recommended), keep Strict dynamics ON.\n"
+            "2) Zenodo workbook + source: MEDIA (default) / ORCH / IOWA / BOTH.\n"
+            "3) Preflight (recommended), keep Strict dynamics ON.\n"
             "4) Prefer M2; Fit & predict.\n"
-            "5) USE: [your .xlsx file] → sheet Predictions_supported → column y_pred "
-            "(yellow highlight in Excel).\n"
+            "5) USE: [your .xlsx] → Predictions_supported → y_pred (yellow).\n"
+            "Note: technique folders without a dynamic (e.g. tasto.xlsx) pair to "
+            "available ordinario dynamics (pp/p/…).\n"
         )
 
         foot = ttk.Frame(self)
@@ -321,14 +322,42 @@ class STTApp(ttk.Frame):
         threading.Thread(target=self._preflight_worker, daemon=True).start()
 
     def _preflight_worker(self) -> None:
+        from .run_history import finalize_run, log_operation, start_run
+
+        record = None
         try:
             metric = self.metric.get().strip()
+            cfg = self._cfg()
+            record = start_run(
+                kind="preflight",
+                bridge_paths=list(self.bridge_paths),
+                target_path=self.target_path.get(),
+                config=cfg.to_dict(),
+                instrument=self.instrument.get(),
+                zenodo_collection=self.zenodo_collection.get(),
+            )
+            log_operation(record, "load_inputs")
             bridge_panel, target = self._load_bridge_and_target(metric)
-            pf = preflight_transfer(bridge_panel, target, self._cfg())
+            pf = preflight_transfer(bridge_panel, target, cfg)
+            log_operation(record, "preflight", {"ok": pf.ok})
+            report = finalize_run(
+                record,
+                status="ok" if pf.ok else "preflight_fail",
+                bridge_panel=bridge_panel,
+                target=target,
+                preflight_df=pf.as_dataframe(),
+                errors=pf.errors,
+                warnings=pf.warnings,
+            )
             self._ui_log("\n=== PREFLIGHT ===")
             self._ui_log(pf.as_dataframe().to_string(index=False))
+            self._ui_log(f"Run history: {report}")
             self._ui_status("Preflight PASS" if pf.ok else "Preflight FAIL")
-            msg = "Preflight PASS — safe to Fit & predict." if pf.ok else "Preflight FAIL — see log."
+            msg = (
+                f"Preflight PASS — safe to Fit & predict.\n\nHistory:\n{report}"
+                if pf.ok
+                else f"Preflight FAIL — see log.\n\nHistory:\n{report}"
+            )
             self.master.after(
                 0,
                 lambda m=msg, ok=pf.ok: messagebox.showinfo("Preflight", m)
@@ -338,6 +367,11 @@ class STTApp(ttk.Frame):
         except Exception as exc:  # noqa: BLE001
             tb = traceback.format_exc()
             err_msg = str(exc)
+            if record is not None:
+                try:
+                    finalize_run(record, status="failed", errors=[err_msg])
+                except Exception:
+                    pass
             self._ui_log("ERROR:\n" + tb)
             self._ui_status("Failed.")
             self.master.after(0, lambda m=err_msg: messagebox.showerror("Error", m))
@@ -372,6 +406,13 @@ class STTApp(ttk.Frame):
                 target,
                 config=self._cfg(),
                 output_xlsx=out,
+                run_meta={
+                    "kind": "transfer",
+                    "bridge_paths": list(self.bridge_paths),
+                    "target_path": self.target_path.get(),
+                    "instrument": self.instrument.get(),
+                    "zenodo_collection": self.zenodo_collection.get(),
+                },
             )
             factors = summarize_factors(bridge)
             self._ui_log("\n=== PREFLIGHT ===")
@@ -404,7 +445,10 @@ class STTApp(ttk.Frame):
                         .median()
                         .to_string()
                     )
+            hist = fit.diagnostics.get("run_history_report", "")
             self._ui_log(f"\nExcel audit: {out_path}")
+            if hist:
+                self._ui_log(f"Run history report: {hist}")
             self._ui_log("=== USE THESE (mimic special technique on IOWA/ORCHIDEA) ===")
             self._ui_log(f"1. FILE NAME : {Path(out_path).name}")
             self._ui_log("2. PAGE NAME : Predictions_supported")
@@ -420,7 +464,8 @@ class STTApp(ttk.Frame):
                 f"Supported rows: {n_sup} / {len(preds)}\n\n"
                 f"1. FILE: {Path(out_path).name}\n"
                 f"2. PAGE: Predictions_supported\n"
-                f"3. COLUMN: y_pred"
+                f"3. COLUMN: y_pred\n\n"
+                f"History:\n{hist}"
             )
             self.master.after(0, lambda m=done_msg: messagebox.showinfo("Done", m))
         except Exception as exc:  # noqa: BLE001

@@ -8,6 +8,8 @@ See [METHODOLOGY.md](METHODOLOGY.md) for the scientific protocol.
 Full math / algorithms / code-line map + tutorial: **[TECHNICAL_MANUAL.md](TECHNICAL_MANUAL.md)** (open in [StackEdit](https://stackedit.io); LaTeX twin in `docs/TECHNICAL_MANUAL.tex`).  
 Reproduce: [REPRODUCE.md](REPRODUCE.md) · Literature priors: [LITERATURE_ALIGNMENT.md](LITERATURE_ALIGNMENT.md)
 
+**Run history:** every Preflight / Fit & predict writes a timestamped folder under `outputs/run_history/` (`RUN_REPORT.md` + `run_manifest.json` + CSV snapshots). Browse `outputs/run_history/INDEX.md`.
+
 ## Quick start (GUI)
 
 ```bat
