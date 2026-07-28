@@ -114,7 +114,12 @@ def run_transfer(
     )
 
     factors = summarize_factors(bridge)
-    quality = build_quality_report(bridge, preds, max_dynamic_distance=cfg.max_dynamic_distance)
+    quality = build_quality_report(
+        bridge,
+        preds,
+        max_dynamic_distance=cfg.max_dynamic_distance,
+        output_xlsx=output_xlsx,
+    )
     # Append CV metrics into quality report
     if len(cv_table):
         extra = []

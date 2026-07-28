@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 
 from .dynamics import MAX_ADEQUATE_DISTANCE, supported_zenodo_dynamics_for_bridge
@@ -12,6 +14,7 @@ def build_quality_report(
     predictions: pd.DataFrame,
     *,
     max_dynamic_distance: int = MAX_ADEQUATE_DISTANCE,
+    output_xlsx: str | Path | None = None,
 ) -> pd.DataFrame:
     rows = []
     n_pred = len(predictions)
@@ -89,11 +92,16 @@ def build_quality_report(
                 "value": int(predictions["factor_clipped"].sum()),
             }
         )
+    file_name = Path(output_xlsx).name if output_xlsx is not None else "(set --out / GUI save path)"
+    rows.append({"item": "1_FILE_NAME", "value": file_name})
+    rows.append({"item": "2_PAGE_NAME", "value": "Predictions_supported"})
+    rows.append({"item": "3_COLUMN_NAME", "value": "y_pred"})
     rows.append(
         {
             "item": "recommendation",
             "value": (
-                "Use Predictions_supported only. Treat extrapolated rows as exploratory. "
+                "USE: file → sheet Predictions_supported → column y_pred "
+                "(highlighted yellow in Excel). Treat Predictions_all as exploratory only. "
                 "Do not label any row as measured collection data."
                 if n_sup
                 else "No supported predictions under the adequate-dynamic policy; enrich the bridge."

@@ -17,7 +17,11 @@ python run_gui.py
 2. Choose Zenodo ordinario workbook + collection (`ORCH` / `IOWA` / `BOTH`)  
 3. Click **Preflight**  
 4. Keep **Strict dynamics** ON; model **M2**  
-5. **Fit & predict** → open sheet **`Predictions_supported`**
+5. **Fit & predict** → use this triad (also highlighted yellow in the Excel `README` sheet):
+
+   1. **File:** your output workbook (e.g. `outputs\transfer_audit.xlsx`)  
+   2. **Page:** **`Predictions_supported`**  
+   3. **Column:** **`y_pred`**  ← values that mimic the special technique on IOWA/ORCHIDEA
 
 ## CLI
 

@@ -159,7 +159,9 @@ class STTApp(ttk.Frame):
             "1) Add bridge files (ordinario + special techniques).\n"
             "2) Choose Zenodo workbook + collection (ORCH/IOWA/BOTH).\n"
             "3) Click Preflight (recommended), keep Strict dynamics ON.\n"
-            "4) Prefer M2; Fit & predict → use sheet Predictions_supported.\n"
+            "4) Prefer M2; Fit & predict.\n"
+            "5) USE: [your .xlsx file] → sheet Predictions_supported → column y_pred "
+            "(yellow highlight in Excel).\n"
         )
 
         foot = ttk.Frame(self)
@@ -385,14 +387,23 @@ class STTApp(ttk.Frame):
                         .to_string()
                     )
             self._ui_log(f"\nExcel audit: {out_path}")
-            self._ui_log("Primary sheet to use: Predictions_supported")
+            self._ui_log("=== USE THESE (mimic special technique on IOWA/ORCHIDEA) ===")
+            self._ui_log(f"1. FILE NAME : {Path(out_path).name}")
+            self._ui_log("2. PAGE NAME : Predictions_supported")
+            self._ui_log("3. COLUMN NAME: y_pred  (yellow highlight)")
             self._ui_status("Done.")
             n_sup = (
                 int(preds["support_level"].isin(["supported", "supported_outlier_target"]).sum())
                 if len(preds) and "support_level" in preds.columns
                 else 0
             )
-            done_msg = f"Wrote\n{out_path}\n\nSupported rows: {n_sup} / {len(preds)}"
+            done_msg = (
+                f"Wrote\n{out_path}\n\n"
+                f"Supported rows: {n_sup} / {len(preds)}\n\n"
+                f"1. FILE: {Path(out_path).name}\n"
+                f"2. PAGE: Predictions_supported\n"
+                f"3. COLUMN: y_pred"
+            )
             self.master.after(0, lambda m=done_msg: messagebox.showinfo("Done", m))
         except Exception as exc:  # noqa: BLE001
             tb = traceback.format_exc()

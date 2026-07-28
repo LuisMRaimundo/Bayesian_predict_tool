@@ -47,5 +47,8 @@ Example: bridge sordina **forte** supports only Zenodo **ff**.
 1. Run **Preflight**.
 2. Keep **Strict dynamics** ON.
 3. Prefer **M2** unless the bridge is rich (many techniques/dynamics) and Bayes extras work.
-4. Publish/analyse only **`Predictions_supported`**.
+4. Publish/analyse only this triad (yellow-highlighted in the Excel workbook):
+   1. **File** — your output `.xlsx`
+   2. **Page** — **`Predictions_supported`**
+   3. **Column** — **`y_pred`**
 5. Report transport-prior fraction and blocked-CV errors with any released table.
