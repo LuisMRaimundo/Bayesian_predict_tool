@@ -1,0 +1,75 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,booktabs,hyperref,longtable,enumitem}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\title{String Technique Transfer --- Technical Manual\\
+\large Mathematical models, algorithms, code map, and tutorial}
+\author{Bayesian\_predict\_tool / \texttt{string\_technique\_transfer}}
+\date{Manual v1.1}
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\noindent\textbf{How to open:} compile with pdfLaTeX, or paste sections into Overleaf.
+For StackEdit (\url{https://stackedit.io}), prefer the Markdown twin
+\texttt{TECHNICAL\_MANUAL.md} in the repository root (same content, KaTeX-ready).
+
+\section{Pedagogical tutorial}
+\subsection{Problem}
+Given a measured ordinario curve $Y_{\mathrm{ord}}$ and a paired bridge of
+ordinario + special technique, produce model-derived synthetic values
+\[
+\widehat Y_t = Y_{\mathrm{ord}}\,e^{\widehat\delta}.
+\]
+\subsection{Recommended use}
+Prefer model \textbf{M2}, Zenodo source \textbf{MEDIA}
+(\texttt{Violin\_Media} column O = Media ff), sheet
+\texttt{Predictions\_supported}, column \texttt{y\_pred}.
+
+\section{Core transport identity}
+\[
+\delta=\log\frac{Y_t}{Y_{\mathrm{ord}}},\qquad
+\widehat Y = Y_{\mathrm{ord}}\,e^{\widehat\delta},\qquad
+f=e^{\widehat\delta}.
+\]
+Code: \texttt{bridge.py} (build), \texttt{models/fit.py} \texttt{predict\_transfer}.
+
+\section{Bridge}
+Winsorize per technique at quantiles $q,1-q$, then shrink
+\[
+\widetilde\delta=\frac{n_{\mathrm{eff}}\delta+\kappa\delta^{\mathrm{prior}}}{n_{\mathrm{eff}}+\kappa}.
+\]
+Lines: \texttt{bridge.py} 19--161; shrink in \texttt{acoustics.py} 48--54.
+
+\section{Models}
+\subsection{M0} Technique mean of $\delta$ (\texttt{\_fit\_m0}, lines 59--73).
+\subsection{M1} Cell means with pool $n_0=4$ (\texttt{\_fit\_m1}, 76--112):
+\[
+\widehat\delta=\frac{n\,\widehat\delta^{\mathrm{cell}}+n_0\mu_t}{n+n_0}.
+\]
+\subsection{M2 (recommended)} Robust constant or WLS B-spline on MIDI
+(\texttt{\_fit\_m2}, 115--236). No spline extrapolation outside bridge MIDI.
+In-range GAM blend: $\widehat\delta=0.7\,\widehat\delta_{\mathrm{raw}}+0.3\mu^{\mathrm{center}}$.
+\subsection{M3} Hierarchical Bayes if rich design; else M2-based approx.
+Full Bambi stores \texttt{idata}; point prediction uses attached M2 models
+(\texttt{\_fit\_m3\_bambi}, 295--373).
+
+\section{Uncertainty}
+\[
+\big[\widehat Y e^{-1.96\sigma},\,\widehat Y e^{+1.96\sigma}\big].
+\]
+\section{Blocked CV}
+Leave-one-pitch-block-out ($B=12$ semitones): MAE/RMSE on log $\delta$, MAPE on factors
+(\texttt{validation/blocked\_cv.py} 30--120).
+
+\section{Consistency audit}
+Transport identity, strict dynamics map $f\leftrightarrow\mathrm{ff}$, MEDIA column O,
+and M2 non-extrapolation verified. M3 corpus pooled means are audit-only;
+Bambi point predictions intentionally use the M2 surface (v1.1 fix).
+
+\section{Code map}
+See Markdown manual §10 for the full line table synchronized with the package.
+
+\end{document}

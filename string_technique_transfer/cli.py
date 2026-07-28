@@ -8,6 +8,8 @@ from pathlib import Path
 from .bridge import summarize_factors
 from .io.loaders import (
     discover_zenodo_dynamic_sheets,
+    find_zenodo_media_sheet,
+    load_zenodo_media_ordinario,
     load_zenodo_ordinario_all,
     load_zenodo_ordinario_collection,
 )
@@ -29,16 +31,28 @@ def _load_inputs(args):
 
     tpath = Path(args.target)
     groups = {}
+    media_sheet = find_zenodo_media_sheet(tpath, instrument=args.instrument)
     try:
         groups = discover_zenodo_dynamic_sheets(tpath, instrument=args.instrument)
     except Exception:
         groups = {}
-    if groups:
+    if groups or media_sheet:
         coll = args.zenodo_collection.strip().upper()
-        if coll == "BOTH":
+        if coll in {"MEDIA", "BOTH"} and media_sheet:
+            target = load_zenodo_media_ordinario(
+                tpath, instrument=args.instrument, metric=args.metric
+            )
+            print(
+                f"zenodo MEDIA: sheet={media_sheet} "
+                f"columns={sorted(target['source_column'].unique())} "
+                f"(ff = column O / Media ff) rows={len(target)}"
+            )
+        elif coll == "BOTH":
             target = load_zenodo_ordinario_all(
                 tpath, instrument=args.instrument, metric=args.metric
             )
+        elif coll == "MEDIA":
+            raise ValueError(f"No *_Media sheet in {tpath.name}")
         else:
             target = load_zenodo_ordinario_collection(
                 tpath,
@@ -63,8 +77,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--target", required=True, help="Target ordinario CSV/XLSX")
     p.add_argument(
         "--zenodo-collection",
-        default="ORCH",
-        help="Zenodo collection: ORCH | IOWA | BOTH (loads pp/mf/ff for each)",
+        default="MEDIA",
+        help="Zenodo source: MEDIA (Violin_Media!O/N/M) | ORCH | IOWA | BOTH",
     )
     p.add_argument("--instrument", default="Violin")
     p.add_argument("--model", default="M2_midi_gam")

@@ -4,7 +4,8 @@ Local research tool for **instrument-agnostic** technique transfer of spectral-d
 
 **Local folder only — not a GitHub project.**
 
-See [METHODOLOGY.md](METHODOLOGY.md) for the scientific protocol.
+See [METHODOLOGY.md](METHODOLOGY.md) for the scientific protocol.  
+Full math / algorithms / code-line map + tutorial: **[TECHNICAL_MANUAL.md](TECHNICAL_MANUAL.md)** (open in [StackEdit](https://stackedit.io); LaTeX twin in `docs/TECHNICAL_MANUAL.tex`).
 
 ## Quick start (GUI)
 
@@ -14,7 +15,7 @@ python run_gui.py
 ```
 
 1. Add bridge files (ordinario + special techniques)  
-2. Choose Zenodo ordinario workbook + collection (`ORCH` / `IOWA` / `BOTH`)  
+2. Choose Zenodo ordinario workbook + source (**`MEDIA`** default = `Violin_Media` columns **M/N/O** = Media pp/mf/**ff**; or `ORCH` / `IOWA`)  
 3. Click **Preflight**  
 4. Keep **Strict dynamics** ON; model **M2**  
 5. **Fit & predict** → use this triad (also highlighted yellow in the Excel `README` sheet):
@@ -26,7 +27,7 @@ python run_gui.py
 ## CLI
 
 ```bat
-python -m string_technique_transfer.cli --bridge data\violin_bridge_panel.csv --target "C:\Users\lmr20\Desktop\VIOLIN_Zenodo_collections_Arco_normal.xlsx" --zenodo-collection ORCH --model M2_midi_gam --out outputs\transfer_audit.xlsx
+python -m string_technique_transfer.cli --bridge data\violin_bridge_panel.csv --target "C:\Users\lmr20\Desktop\VIOLIN_Zenodo_collections_Arco_normal.xlsx" --zenodo-collection MEDIA --model M2_midi_gam --out outputs\transfer_audit.xlsx
 
 python -m string_technique_transfer.cli --bridge ... --target ... --preflight-only
 ```

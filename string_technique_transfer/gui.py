@@ -15,6 +15,8 @@ from .config import TransferConfig
 from .dynamics import ZENODO_DYNAMICS
 from .io.loaders import (
     discover_zenodo_dynamic_sheets,
+    find_zenodo_media_sheet,
+    load_zenodo_media_ordinario,
     load_zenodo_ordinario_all,
     load_zenodo_ordinario_collection,
 )
@@ -35,7 +37,7 @@ class STTApp(ttk.Frame):
 
         self.bridge_paths: list[str] = []
         self.target_path = tk.StringVar()
-        self.zenodo_collection = tk.StringVar(value="ORCH")  # IOWA / ORCH / BOTH
+        self.zenodo_collection = tk.StringVar(value="MEDIA")  # MEDIA / ORCH / IOWA / BOTH
         self.instrument = tk.StringVar(value="Violin")
         self.model_id = tk.StringVar(value="M2_midi_gam")
         self.metric = tk.StringVar(value="EWSD_score_acoustic_balanced")
@@ -98,7 +100,7 @@ class STTApp(ttk.Frame):
         ttk.Combobox(
             row2,
             textvariable=self.zenodo_collection,
-            values=["ORCH", "IOWA", "BOTH"],
+            values=["MEDIA", "ORCH", "IOWA", "BOTH"],
             width=12,
             state="readonly",
         ).pack(side="left", padx=6)
@@ -253,19 +255,35 @@ class STTApp(ttk.Frame):
         tpath = Path(self.target_path.get())
         self._ui_log(f"Loading target: {tpath}")
         use_zenodo = False
+        media_sheet = None
         if tpath.suffix.lower() in {".xlsx", ".xlsm"}:
             try:
                 groups = discover_zenodo_dynamic_sheets(tpath, instrument=self.instrument.get())
-                use_zenodo = bool(groups)
+                media_sheet = find_zenodo_media_sheet(tpath, instrument=self.instrument.get())
+                use_zenodo = bool(groups) or bool(media_sheet)
             except Exception:
                 use_zenodo = "zenodo" in tpath.name.lower()
+                media_sheet = find_zenodo_media_sheet(tpath, instrument=self.instrument.get())
         if use_zenodo:
             coll = self.zenodo_collection.get().strip().upper()
-            if coll == "BOTH":
+            if coll in {"MEDIA", "BOTH"} and media_sheet:
+                target = load_zenodo_media_ordinario(
+                    tpath, instrument=self.instrument.get(), metric=metric
+                )
+                src_cols = sorted(target["source_column"].dropna().astype(str).unique())
+                self._ui_log(
+                    f"Zenodo MEDIA sheet: {media_sheet} "
+                    f"(columns {src_cols}; ff = Excel column O / Media ff)"
+                )
+            elif coll == "BOTH":
                 target = load_zenodo_ordinario_all(
                     tpath, instrument=self.instrument.get(), metric=metric
                 )
                 self._ui_log(f"Zenodo collections loaded: {sorted(target['collection'].unique())}")
+            elif coll == "MEDIA" and not media_sheet:
+                raise ValueError(
+                    f"No *_Media sheet in {tpath.name}. Use ORCH/IOWA or add Violin_Media."
+                )
             else:
                 target = load_zenodo_ordinario_collection(
                     tpath,
@@ -273,7 +291,7 @@ class STTApp(ttk.Frame):
                     instrument=self.instrument.get(),
                     metric=metric,
                 )
-                self._ui_log(f"Zenodo collection: {coll}")
+                self._ui_log(f"Zenodo collection: {coll} (Combined density metric sheets)")
             dyns = sorted(target["dynamic"].dropna().astype(str).unique().tolist())
             self._ui_log(
                 f"  target rows={len(target)} dynamics={dyns} "

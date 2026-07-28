@@ -339,6 +339,9 @@ def _fit_m3_bambi(df: pd.DataFrame, metric: str, *, bmb, az) -> FitResult:
         if data["corpus_id"].nunique() > 1
         else 0.15
     )
+    # Point prediction uses the regularized M2 surface (stable on Windows).
+    # Bambi InferenceData is retained for posterior diagnostics / audit.
+    m2 = _fit_m2(df, metric)
     return FitResult(
         model_id="M3_hierarchical_bayes",
         backend="bambi_pymc",
@@ -348,9 +351,12 @@ def _fit_m3_bambi(df: pd.DataFrame, metric: str, *, bmb, az) -> FitResult:
         params={
             "idata": idata,
             "model": model,
-            "transport_sd": max(transport_sd, 0.08),
+            "models": m2.params.get("models", {}),
+            "transport_sd": max(transport_sd, float(m2.params.get("transport_sd", 0.08))),
+            "midi_range": m2.params.get("midi_range", {}),
             "formula": formula,
             "data_columns": list(data.columns),
+            "point_predict": "M2_regularized_surface",
         },
         diagnostics={
             "divergences": int(idata.sample_stats["diverging"].sum().item())
@@ -358,6 +364,11 @@ def _fit_m3_bambi(df: pd.DataFrame, metric: str, *, bmb, az) -> FitResult:
             else None,
             "transport_sd": max(transport_sd, 0.08),
             "formula": formula,
+            "point_predict": "M2_regularized_surface",
+            "note": (
+                "Full Bayes posterior stored in params['idata']; "
+                "y_pred uses attached regularized M2 models for numerical stability."
+            ),
         },
     )
 

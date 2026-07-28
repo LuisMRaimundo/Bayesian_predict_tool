@@ -114,6 +114,106 @@ def resolve_zenodo_sheet(path: str | Path, sheet_name: str) -> str:
     )
 
 
+def find_zenodo_media_sheet(path: str | Path, instrument: str = "Violin") -> str | None:
+    """Return `{Instrument}_Media` sheet name if present (e.g. Violin_Media)."""
+    path = Path(path)
+    names = pd.ExcelFile(path).sheet_names
+    instr = instrument.strip().lower().replace(" ", "")
+    want = f"{instr}_media"
+    for n in names:
+        key = n.lower().replace(" ", "").replace("-", "_").replace("__", "_")
+        if key == want or key.endswith("_media") and instr in key:
+            return n
+    for n in names:
+        if n.strip().lower().endswith("_media") or n.strip().lower() == "media":
+            return n
+    return None
+
+
+def load_zenodo_media_ordinario(
+    path: str | Path,
+    *,
+    instrument: str = "Violin",
+    metric: str = "EWSD_score_acoustic_balanced",
+) -> pd.DataFrame:
+    """Load Zenodo IOWA/ORCH mean targets from `{Instrument}_Media`.
+
+    Canonical columns (Excel letters on Violin_Media):
+      - Media pp → column M
+      - Media mf → column N
+      - Media ff → column O   ← use this for ff ordinario baseline
+    """
+    path = Path(path)
+    sheet = find_zenodo_media_sheet(path, instrument=instrument)
+    if sheet is None:
+        raise ValueError(f"No *_Media sheet found in {path.name}")
+
+    raw = pd.read_excel(path, sheet_name=sheet)
+    # Prefer explicit Media pp/mf/ff headers; fall back to Excel column letters M/N/O (index 12/13/14)
+    colmap: dict[str, object] = {}
+    for dyn, names in (
+        ("pp", ("Media pp", "Média pp", "media pp")),
+        ("mf", ("Media mf", "Média mf", "media mf")),
+        ("ff", ("Media ff", "Média ff", "media ff")),
+    ):
+        hit = None
+        for c in raw.columns:
+            if str(c).strip().lower() in {n.lower() for n in names}:
+                hit = c
+                break
+        if hit is None:
+            # letter fallback: M=12, N=13, O=14 (0-based) when headers are present in that layout
+            idx = {"pp": 12, "mf": 13, "ff": 14}[dyn]
+            if len(raw.columns) > idx:
+                hit = raw.columns[idx]
+        if hit is not None:
+            colmap[dyn] = hit
+
+    if "ff" not in colmap:
+        raise ValueError(
+            f"Sheet {sheet}: missing Media ff (column O). Columns={list(raw.columns)}"
+        )
+
+    note_col = None
+    for c in raw.columns:
+        if str(c).strip().lower() in {"note", "source note"}:
+            note_col = c
+            break
+    if note_col is None:
+        note_col = raw.columns[0]
+
+    frames = []
+    for dyn, col in colmap.items():
+        vals = pd.to_numeric(raw[col], errors="coerce")
+        notes = raw[note_col]
+        part = pd.DataFrame(
+            {
+                "instrument": instrument,
+                "collection": "MEDIA",
+                "technique": "ordinario",
+                "dynamic": dyn,
+                "note": notes,
+                "midi": pd.NA,
+                "metric": metric,
+                "value": vals,
+                "ci_low": pd.NA,
+                "ci_high": pd.NA,
+                "rel_uncertainty": pd.NA,
+                "source_file": str(path),
+                "source_sheet": sheet,
+                "source_column": str(col),
+            }
+        )
+        part["midi"] = part["note"].map(_note_to_midi)
+        part["is_ordinario"] = True
+        part["corpus_id"] = part["instrument"] + "|MEDIA"
+        part["register"] = pd.NA
+        frames.append(part.dropna(subset=["value"]))
+
+    out = pd.concat(frames, ignore_index=True)
+    return out
+
+
 def discover_zenodo_dynamic_sheets(
     path: str | Path,
     *,
