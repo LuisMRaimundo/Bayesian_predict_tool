@@ -8,11 +8,14 @@ pip install -e .
 pip install pytest
 ```
 
-Optional full Bayes:
+Optional full Bayes (pinned — see `requirements-bayes.txt`):
 
 ```bat
+pip install -r requirements-bayes.txt
 pip install -e ".[bayes]"
 ```
+
+M3 fails unless this stack imports cleanly, unless you explicitly pass `--allow-m3-approx` (non-Bayesian; not publication-grade).
 
 ## 2. Smoke (no external data)
 
@@ -46,4 +49,5 @@ Also inspect: `Model_comparison`, `Calibration`, `Holdout_summary`, `Blocked_CV`
 
 ## 5. Scientific constraints
 
-See `LITERATURE_ALIGNMENT.md` — soft priors only; no activated universal EWSD mute law from literature.
+See `LITERATURE_ALIGNMENT.md` — soft priors only; no activated universal EWSD mute law from literature.  
+See **`AUDIT_RESPONSE.md`** for audit defects, what was fixed in v0.3, and what remains before publication-grade extrapolations.

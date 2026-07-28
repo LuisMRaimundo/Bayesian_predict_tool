@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "string-technique-transfer"
-version = "0.2.0"
-description = "Local instrument-agnostic hierarchical Bayesian technique-transfer for string spectral metrics."
+version = "0.3.0"
+description = "Instrument-agnostic technique-transfer for string spectral metrics (exploratory; see AUDIT_RESPONSE.md)."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -20,7 +20,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-bayes = ["pymc>=5.10", "bambi>=0.13", "arviz>=0.17"]
+bayes = [
+  "pymc==5.16.2",
+  "bambi==0.14.0",
+  "arviz==0.19.0",
+  "pytensor==2.25.2",
+]
 
 [project.scripts]
 stt = "string_technique_transfer.cli:main"

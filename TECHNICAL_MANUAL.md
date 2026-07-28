@@ -13,6 +13,12 @@ stackedit: Open this file in https://stackedit.io (Markdown + KaTeX)
 **Local folder:** `C:\Users\lmr20\Desktop\Bayesian Tool`  
 **How to view equations:** open this file in [StackEdit](https://stackedit.io) (File → Open from disk). All mathematics uses standard LaTeX delimiters (`$$ … $$`, `$…$`).
 
+### v1.4 / v0.3 audit corrections (implemented)
+
+- Bridge: literal `require_same_collection`; dual corpus ids; unspecified dynamics kept; no response-level prior shrink.  
+- M3: no silent approx fallback; optional `(1|corpus_id)` when identifiable.  
+- CV: winsorize inside folds; intervals labelled heuristic. See **`AUDIT_RESPONSE.md`**.
+
 ### v1.3 upgrades (implemented)
 
 - **Illustrated run history:** each Preflight / Fit writes `outputs/run_history/<id>/RUN_REPORT.html` with **all uploaded Excel names**, config, operations, fit/CV, and Chart.js figures (`run_history.py`, `run_report_html.py`). Markdown/JSON/CSV twins remain.

@@ -12,7 +12,8 @@ from .models.base import MODEL_CHOICES
 class TransferConfig:
     metric: str = "EWSD_score_acoustic_balanced"
     model_id: str = "M2_midi_gam"
-    require_same_collection: bool = False
+    # Audit default: do not silently invent same-collection pairs
+    require_same_collection: bool = True
     strict_dynamics: bool = True
     max_dynamic_distance: int = MAX_ADEQUATE_DISTANCE
     run_blocked_cv: bool = True
@@ -21,6 +22,10 @@ class TransferConfig:
     run_holdout: bool = True
     run_sensitivity: bool = True
     auto_select_model: bool = False
+    # Acoustic prior applied once at model coefficients (never overwrite each response)
+    apply_acoustic_prior: bool = True
+    # When False, explicit M3 requests fail instead of silent hierarchical_approx_*
+    allow_m3_approx_fallback: bool = False
     cv_block_semitones: int = 12
     min_bridge_pairs: int = 8
     min_supported_predictions: int = 1

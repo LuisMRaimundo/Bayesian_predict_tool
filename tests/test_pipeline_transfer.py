@@ -15,7 +15,7 @@ def _synth_bridge(n=16):
         rows.append(
             dict(
                 instrument="Violin",
-                collection="ord_corp",
+                collection="lab",
                 technique="ordinario",
                 dynamic="f",
                 midi=float(midi),
@@ -24,14 +24,14 @@ def _synth_bridge(n=16):
                 value=float(yo),
                 ci_low=float(yo * 0.9),
                 ci_high=float(yo * 1.1),
-                corpus_id="Violin|ord_corp",
+                corpus_id="Violin|lab",
                 is_ordinario=True,
             )
         )
         rows.append(
             dict(
                 instrument="Violin",
-                collection="sord_corp",
+                collection="lab",
                 technique="con_sordino",
                 dynamic="f",
                 midi=float(midi),
@@ -40,7 +40,7 @@ def _synth_bridge(n=16):
                 value=float(yt),
                 ci_low=float(yt * 0.9),
                 ci_high=float(yt * 1.1),
-                corpus_id="Violin|sord_corp",
+                corpus_id="Violin|lab",
                 is_ordinario=False,
             )
         )

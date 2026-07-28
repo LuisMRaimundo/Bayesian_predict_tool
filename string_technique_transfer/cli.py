@@ -83,11 +83,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--instrument", default="Violin")
     p.add_argument("--model", default="M2_midi_gam")
     p.add_argument("--metric", default="EWSD_score_acoustic_balanced")
-    p.add_argument("--same-collection", action="store_true")
+    p.add_argument(
+        "--allow-cross-collection",
+        action="store_true",
+        help="Allow cross-collection pairs labelled transport_prior (default: reject / same-collection only).",
+    )
     p.add_argument(
         "--no-strict-dynamics",
         action="store_true",
         help="Allow inadequate dynamic matches (e.g. f->pp) as extrapolated rows",
+    )
+    p.add_argument(
+        "--allow-m3-approx",
+        action="store_true",
+        help="Authorize non-Bayesian M3 approximation if Bambi/PyMC is unavailable",
     )
     p.add_argument("--preflight-only", action="store_true")
     p.add_argument("--no-cv", action="store_true")
@@ -98,8 +107,9 @@ def main(argv: list[str] | None = None) -> int:
     cfg = TransferConfig(
         metric=args.metric,
         model_id=args.model,
-        require_same_collection=args.same_collection,
+        require_same_collection=not args.allow_cross_collection,
         strict_dynamics=not args.no_strict_dynamics,
+        allow_m3_approx_fallback=args.allow_m3_approx,
         run_blocked_cv=not args.no_cv,
     )
     run_meta = {

@@ -1,0 +1,6 @@
+# Pinned Bayes stack for M3 (install: pip install -r requirements-bayes.txt)
+# Keep these three mutually compatible; CI exercises import + optional smoke.
+pymc==5.16.2
+bambi==0.14.0
+arviz==0.19.0
+pytensor==2.25.2

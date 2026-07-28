@@ -15,53 +15,61 @@ from __future__ import annotations
 import numpy as np
 
 # Soft expected direction / bounds on multiplicative EWSD factors.
-# These are research priors for bowed-string special techniques, not hard laws.
+# Research priors for bowed-string special techniques — NOT response-level laws.
+# Apply once at the **model-coefficient** level with n_eff = n_obs for that technique.
+# Do not shrink every bridge row before fitting (that double-counts the prior).
 TECHNIQUE_PRIOR = {
     "con_sordino": {
         "direction": "decrease",
         "factor_lo": 0.45,
         "factor_hi": 1.05,
         "prior_log": np.log(0.85),
-        "prior_strength": 4.0,  # pseudo-observations toward prior
+        # Weak coefficient-level pseudo-count (relative to n_obs of the technique)
+        "prior_strength": 1.0,
     },
     "sul_ponticello": {
         "direction": "increase",
         "factor_lo": 0.90,
         "factor_hi": 2.40,
         "prior_log": np.log(1.25),
-        "prior_strength": 3.0,
+        "prior_strength": 1.0,
     },
     "sul_tasto": {
         "direction": "decrease",
         "factor_lo": 0.50,
         "factor_hi": 1.10,
         "prior_log": np.log(0.80),
-        "prior_strength": 3.0,
+        "prior_strength": 1.0,
     },
     "natural_harmonics": {
         "direction": "decrease",
         "factor_lo": 0.25,
         "factor_hi": 1.05,
         "prior_log": np.log(0.65),
-        "prior_strength": 4.0,
+        "prior_strength": 1.0,
     },
     "artificial_harmonics": {
         "direction": "decrease",
         "factor_lo": 0.25,
         "factor_hi": 1.05,
         "prior_log": np.log(0.60),
-        "prior_strength": 4.0,
+        "prior_strength": 1.0,
     },
 }
 
 
 def shrink_log_ratio(log_ratio: float, technique: str, n_eff: float = 1.0) -> float:
-    """Partial-pool a log-ratio toward the acoustic prior."""
+    """Partial-pool a **technique coefficient** toward the acoustic prior.
+
+    Intended for model-level means with ``n_eff`` ≈ number of bridge pairs for
+    that technique — not for overwriting each observation (n_eff=1).
+    """
     conf = TECHNIQUE_PRIOR.get(technique)
     if conf is None:
         return float(log_ratio)
     k = float(conf["prior_strength"])
-    return float((n_eff * log_ratio + k * conf["prior_log"]) / (n_eff + k))
+    n = max(float(n_eff), 1e-6)
+    return float((n * log_ratio + k * conf["prior_log"]) / (n + k))
 
 
 def clip_log_effect(log_effect: float, technique: str) -> tuple[float, bool]:

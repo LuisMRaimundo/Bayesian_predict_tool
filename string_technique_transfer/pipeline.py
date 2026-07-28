@@ -142,11 +142,22 @@ def run_transfer(
         if calib is not None:
             log_operation(record, "calibration", calib.to_dict())
 
-        fit = fit_model(bridge, model_id=cfg.model_id, metric=cfg.metric)
+        fit = fit_model(
+            bridge,
+            model_id=cfg.model_id,
+            metric=cfg.metric,
+            apply_acoustic_prior=cfg.apply_acoustic_prior,
+            allow_m3_approx_fallback=cfg.allow_m3_approx_fallback,
+        )
         log_operation(
             record,
             "fit_model",
-            {"model_id": fit.model_id, "backend": fit.backend, "bridge_n": fit.bridge_n},
+            {
+                "model_id": fit.model_id,
+                "backend": fit.backend,
+                "bridge_n": fit.bridge_n,
+                "is_bayesian": fit.diagnostics.get("is_bayesian"),
+            },
         )
         if calib is not None:
             fit.params["calibration"] = calib.to_dict()
@@ -157,9 +168,18 @@ def run_transfer(
             fit.diagnostics["recommended_model"] = rec
             pf.summary["recommended_model"] = rec
 
+        _skip_dyn = {"unspecified", "unknown", "nan", ""}
         bridge_dyns = (
             bridge.groupby("technique")["dynamic"]
-            .apply(lambda s: sorted(s.dropna().astype(str).unique()))
+            .apply(
+                lambda s: sorted(
+                    {
+                        str(x).lower()
+                        for x in s.dropna().astype(str).unique()
+                        if str(x).lower() not in _skip_dyn
+                    }
+                )
+            )
             .to_dict()
         )
         preds = predict_transfer(
@@ -183,6 +203,8 @@ def run_transfer(
                 model_id=cfg.model_id,
                 metric=cfg.metric,
                 block_semitones=cfg.cv_block_semitones,
+                apply_acoustic_prior=cfg.apply_acoustic_prior,
+                allow_m3_approx_fallback=True,
             )
             if cfg.run_blocked_cv
             else pd.DataFrame([{"status": "skipped", "reason": "disabled_by_config"}])

@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from ..bridge import winsorize_log_ratios
 from ..models.fit import _effect_from_fit, fit_model
 
 
@@ -27,6 +28,39 @@ def _make_blocks(midis: np.ndarray, block_semitones: int = 12) -> list[np.ndarra
     return blocks
 
 
+def _prepare_fold(
+    train: pd.DataFrame,
+    test: pd.DataFrame,
+    *,
+    winsor_q: float,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Re-winsorize from raw inside the training fold; apply train bounds to test y_true."""
+    if "log_ratio_raw" not in train.columns:
+        return train, test
+    train_w = winsorize_log_ratios(train, winsor_q=winsor_q)
+    test_w = test.copy()
+    # Evaluate against train-fold winsor thresholds (no test leakage of quantiles)
+    bounds = (
+        train_w.groupby("technique")[["winsor_lo", "winsor_hi"]].first()
+        if winsor_q and winsor_q > 0
+        else None
+    )
+    if bounds is not None and len(bounds):
+        ys = []
+        for _, r in test_w.iterrows():
+            raw = float(r["log_ratio_raw"])
+            tech = r["technique"]
+            if tech in bounds.index:
+                lo, hi = float(bounds.loc[tech, "winsor_lo"]), float(bounds.loc[tech, "winsor_hi"])
+                ys.append(float(np.clip(raw, lo, hi)))
+            else:
+                ys.append(raw)
+        test_w["log_ratio"] = ys
+    else:
+        test_w["log_ratio"] = test_w["log_ratio_raw"]
+    return train_w, test_w
+
+
 def blocked_pitch_cv(
     bridge: pd.DataFrame,
     *,
@@ -34,12 +68,18 @@ def blocked_pitch_cv(
     metric: str = "EWSD_score_acoustic_balanced",
     block_semitones: int = 12,
     min_train: int = 6,
+    winsor_q: float = 0.05,
+    apply_acoustic_prior: bool = True,
+    allow_m3_approx_fallback: bool = True,
 ) -> pd.DataFrame:
     """Leave-one-pitch-block-out CV on bridge log-ratios.
 
-    Returns a metrics table (one row if successful, empty if CV impossible).
+    Winsorization (and model prior application) are estimated inside each training fold.
+    ``allow_m3_approx_fallback`` defaults True for CV so thin folds do not abort the pack.
     """
     df = bridge.dropna(subset=["log_ratio", "midi", "technique", "dynamic"]).copy()
+    if "log_ratio_raw" not in df.columns:
+        df["log_ratio_raw"] = df["log_ratio"]
     if len(df) < min_train + 3:
         return pd.DataFrame(
             [
@@ -71,12 +111,19 @@ def blocked_pitch_cv(
         train = df[~df["midi"].isin(block)]
         if len(train) < min_train or len(test) == 0:
             continue
+        train_w, test_w = _prepare_fold(train, test, winsor_q=winsor_q)
         try:
-            fit = fit_model(train, model_id=model_id, metric=metric)
+            fit = fit_model(
+                train_w,
+                model_id=model_id,
+                metric=metric,
+                apply_acoustic_prior=apply_acoustic_prior,
+                allow_m3_approx_fallback=allow_m3_approx_fallback,
+            )
         except Exception:
             continue
         n_folds += 1
-        for _, r in test.iterrows():
+        for _, r in test_w.iterrows():
             delta, _se, _flag = _effect_from_fit(
                 fit, str(r["technique"]), str(r["dynamic"]), float(r["midi"])
             )
@@ -96,7 +143,6 @@ def blocked_pitch_cv(
     resid = yt - yp
     mae = float(np.mean(np.abs(resid)))
     rmse = float(np.sqrt(np.mean(resid**2)))
-    # proportional error on factor scale
     factor_true = np.exp(yt)
     factor_pred = np.exp(yp)
     mape = float(np.mean(np.abs(factor_true - factor_pred) / np.clip(factor_true, 1e-6, None)))
@@ -115,6 +161,7 @@ def blocked_pitch_cv(
                 "mape_factor": mape,
                 "median_abs_log_err": float(np.median(np.abs(resid))),
                 "bias_log": float(np.mean(resid)),
+                "winsor_inside_fold": True,
             }
         ]
     )

@@ -57,3 +57,6 @@ def test_build_log_ratios_basic():
     bridge = build_log_ratios(panel, require_same_collection=False)
     assert len(bridge) == 4
     assert (bridge["factor"] < 1.0).all()
+    assert bridge["is_transport_prior"].all()
+    assert set(bridge["support_flag"]) == {"transport_prior"}
+    assert "special_corpus_id" in bridge.columns and "ordinario_corpus_id" in bridge.columns

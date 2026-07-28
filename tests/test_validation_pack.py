@@ -16,14 +16,14 @@ def _synth_bridge(n=16):
     for i, midi in enumerate(midis):
         yo = 12 + 0.05 * (midi - 70) + np.random.default_rng(i).normal(0, 0.3)
         yt = yo * 0.82
-        for tech, y, coll, ord_flag in (
-            ("ordinario", yo, "ord_corp", True),
-            ("con_sordino", yt, "sord_corp", False),
+        for tech, y, ord_flag in (
+            ("ordinario", yo, True),
+            ("con_sordino", yt, False),
         ):
             rows.append(
                 dict(
                     instrument="Violin",
-                    collection=coll,
+                    collection="lab",
                     technique=tech,
                     dynamic="f",
                     midi=float(midi),
@@ -32,7 +32,7 @@ def _synth_bridge(n=16):
                     value=float(y),
                     ci_low=float(y * 0.9),
                     ci_high=float(y * 1.1),
-                    corpus_id=f"Violin|{coll}",
+                    corpus_id="Violin|lab",
                     is_ordinario=ord_flag,
                 )
             )

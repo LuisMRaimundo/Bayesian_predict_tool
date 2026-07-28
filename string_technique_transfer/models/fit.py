@@ -36,7 +36,14 @@ def _register_bin(midi: float) -> str:
     return "very_high"
 
 
-def fit_model(bridge: pd.DataFrame, model_id: str = "M2_midi_gam", metric: str | None = None) -> FitResult:
+def fit_model(
+    bridge: pd.DataFrame,
+    model_id: str = "M2_midi_gam",
+    metric: str | None = None,
+    *,
+    apply_acoustic_prior: bool = True,
+    allow_m3_approx_fallback: bool = False,
+) -> FitResult:
     if model_id not in MODEL_CHOICES:
         raise ValueError(f"Unknown model_id {model_id}. Choose from {MODEL_CHOICES}")
     df = bridge.copy()
@@ -45,15 +52,23 @@ def fit_model(bridge: pd.DataFrame, model_id: str = "M2_midi_gam", metric: str |
     df["register"] = df["midi"].map(_register_bin)
     df["dynamic"] = df["dynamic"].fillna("unspecified").astype(str)
     df["technique"] = df["technique"].astype(str)
-    df["corpus_id"] = df.get("corpus_id", pd.Series(["unknown"] * len(df))).astype(str)
+    if "special_corpus_id" in df.columns:
+        df["corpus_id"] = df["special_corpus_id"].astype(str)
+    else:
+        df["corpus_id"] = df.get("corpus_id", pd.Series(["unknown"] * len(df))).astype(str)
 
     if model_id == "M0_global_factor":
         return _fit_m0(df, metric)
     if model_id == "M1_register_dynamic":
         return _fit_m1(df, metric)
     if model_id == "M2_midi_gam":
-        return _fit_m2(df, metric)
-    return _fit_m3(df, metric)
+        return _fit_m2(df, metric, apply_acoustic_prior=apply_acoustic_prior)
+    return _fit_m3(
+        df,
+        metric,
+        apply_acoustic_prior=apply_acoustic_prior,
+        allow_m3_approx_fallback=allow_m3_approx_fallback,
+    )
 
 
 def _fit_m0(df: pd.DataFrame, metric: str) -> FitResult:
@@ -112,7 +127,9 @@ def _fit_m1(df: pd.DataFrame, metric: str) -> FitResult:
     )
 
 
-def _fit_m2(df: pd.DataFrame, metric: str) -> FitResult:
+def _fit_m2(
+    df: pd.DataFrame, metric: str, *, apply_acoustic_prior: bool = True
+) -> FitResult:
     """Regularized MIDI-smooth transfer model per technique."""
     from ..acoustics import robust_log_weights, shrink_log_ratio
 
@@ -121,14 +138,21 @@ def _fit_m2(df: pd.DataFrame, metric: str) -> FitResult:
     midi_range: dict[str, tuple[float, float]] = {}
     for tech, g in df.groupby("technique"):
         g = g.copy()
+        # Exclude invented dynamics from spline factors; keep rows for pitch model
+        measured = g[~g["dynamic"].astype(str).str.lower().isin({"unspecified", "unknown"})]
+        g_fit = measured if len(measured) >= max(6, len(g) // 3) else g
         midi_range[tech] = (float(g["midi"].min()), float(g["midi"].max()))
-        mu_med = float(g["log_ratio"].median())
-        mu = shrink_log_ratio(mu_med, str(tech), n_eff=float(len(g)))
-        se = float(g["log_ratio"].sem(ddof=1)) if len(g) > 1 else 0.35
+        mu_med = float(g_fit["log_ratio"].median())
+        n_eff = float(len(g_fit))
+        mu = shrink_log_ratio(mu_med, str(tech), n_eff=n_eff) if apply_acoustic_prior else mu_med
+        se = float(g_fit["log_ratio"].sem(ddof=1)) if len(g_fit) > 1 else 0.35
         se = max(se, 0.12)
+        if "is_transport_prior" in g.columns and float(g["is_transport_prior"].mean()) > 0.5:
+            se = max(se, 0.18)
 
-        # Small-n or single-dynamic: robust constant (more stable than wiggly spline)
-        use_constant = len(g) < 12 or g["dynamic"].nunique() == 1 and len(g) < 25
+        # Small-n or single measured dynamic: robust constant (more stable than wiggly spline)
+        n_dyn_meas = int(g_fit["dynamic"].nunique())
+        use_constant = len(g_fit) < 12 or (n_dyn_meas <= 1 and len(g_fit) < 25)
         if use_constant:
             models[tech] = {
                 "type": "constant",
@@ -144,32 +168,35 @@ def _fit_m2(df: pd.DataFrame, metric: str) -> FitResult:
                     "register": "all",
                     "log_effect": mu,
                     "se": se,
-                    "n": len(g),
+                    "n": len(g_fit),
                     "fit_type": "robust_constant",
                 }
             )
             continue
         try:
-            df_spline = max(3, min(4, len(g) // 6))
-            y = g["log_ratio"].to_numpy()
-            if g["dynamic"].nunique() > 1:
+            df_spline = max(3, min(4, len(g_fit) // 6))
+            y = g_fit["log_ratio"].to_numpy()
+            if n_dyn_meas > 1:
                 X = dmatrix(
                     f"bs(midi, df={df_spline}, include_intercept=True) + C(dynamic)",
-                    g,
+                    g_fit,
                     return_type="dataframe",
                 )
             else:
                 X = dmatrix(
                     f"bs(midi, df={df_spline}, include_intercept=True)",
-                    g,
+                    g_fit,
                     return_type="dataframe",
                 )
-            w = robust_log_weights(y, g["se_log_obs"].to_numpy() if "se_log_obs" in g else None)
+            w = robust_log_weights(
+                y, g_fit["se_log_obs"].to_numpy() if "se_log_obs" in g_fit else None
+            )
             fit = sm.WLS(y, X, weights=w).fit()
-            # shrink fitted median toward prior
+            # One coefficient-level shrink of the fitted center (not per-row)
             med_fit = float(np.median(fit.fittedvalues))
-            med_fit = shrink_log_ratio(med_fit, str(tech), n_eff=float(len(g)))
-            resid_sd = float(np.std(fit.resid, ddof=1)) if len(g) > 2 else se
+            if apply_acoustic_prior:
+                med_fit = shrink_log_ratio(med_fit, str(tech), n_eff=n_eff)
+            resid_sd = float(np.std(fit.resid, ddof=1)) if len(g_fit) > 2 else se
             models[tech] = {
                 "type": "gam",
                 "result": fit,
@@ -185,8 +212,8 @@ def _fit_m2(df: pd.DataFrame, metric: str) -> FitResult:
                     "dynamic": "all",
                     "register": "all",
                     "log_effect": med_fit,
-                    "se": max(float(g["log_ratio"].sem(ddof=1)), 0.12),
-                    "n": len(g),
+                    "se": max(float(g_fit["log_ratio"].sem(ddof=1)), 0.12),
+                    "n": len(g_fit),
                     "r2": float(getattr(fit, "rsquared", np.nan)),
                     "fit_type": "regularized_gam",
                 }
@@ -207,17 +234,23 @@ def _fit_m2(df: pd.DataFrame, metric: str) -> FitResult:
                     "register": "all",
                     "log_effect": mu,
                     "se": se,
-                    "n": len(g),
+                    "n": len(g_fit),
                     "fit_type": "constant_after_gam_fail",
                 }
             )
 
-    # Cross-corpus transport sd; floor higher when all pairs are transport priors
+    # Transport sd from corpus contrast; higher floor when most pairs are transport priors
+    if "ordinario_corpus_id" in df.columns and "special_corpus_id" in df.columns:
+        mismatch = (df["ordinario_corpus_id"].astype(str) != df["special_corpus_id"].astype(str)).mean()
+    else:
+        mismatch = float(df["is_transport_prior"].mean()) if "is_transport_prior" in df.columns else 0.0
     if df["corpus_id"].nunique() > 1:
         transport_sd = float(df.groupby("corpus_id")["log_ratio"].mean().std(ddof=0))
     else:
         transport_sd = 0.18
-    if "is_transport_prior" in df.columns and float(df["is_transport_prior"].mean()) > 0.5:
+    if mismatch > 0.5 or (
+        "is_transport_prior" in df.columns and float(df["is_transport_prior"].mean()) > 0.5
+    ):
         transport_sd = max(transport_sd, 0.22)
     transport_sd = max(transport_sd, 0.12)
 
@@ -227,48 +260,80 @@ def _fit_m2(df: pd.DataFrame, metric: str) -> FitResult:
         metric=metric,
         bridge_n=len(df),
         effects=pd.DataFrame(effect_rows),
-        params={"models": models, "transport_sd": transport_sd, "midi_range": midi_range},
+        params={
+            "models": models,
+            "transport_sd": transport_sd,
+            "midi_range": midi_range,
+            "apply_acoustic_prior": apply_acoustic_prior,
+            "interval_type": "heuristic_predictive",
+        },
         diagnostics={
             "transport_sd": transport_sd,
             "techniques_fit": list(models),
-            "policy": "adequate_dynamics+winsor+acoustic_shrink",
+            "policy": "winsor_responses+coefficient_acoustic_prior"
+            if apply_acoustic_prior
+            else "winsor_responses_only",
+            "interval_type": "heuristic_predictive_not_bayesian_credible",
         },
     )
 
 
-def _fit_m3(df: pd.DataFrame, metric: str) -> FitResult:
-    # Skip full Bayes when the design is too thin — avoids noisy Windows/PyTensor failures
+def _fit_m3(
+    df: pd.DataFrame,
+    metric: str,
+    *,
+    apply_acoustic_prior: bool = True,
+    allow_m3_approx_fallback: bool = False,
+) -> FitResult:
+    """Fit M3. Requires a working Bambi/PyMC stack unless approx fallback is authorized."""
     n = len(df)
     n_tech = int(df["technique"].nunique())
     n_dyn = int(df["dynamic"].nunique())
-    if n < 25 or n_tech < 2:
-        approx = _fit_m3_approx(df, metric)
+
+    def _approx_or_raise(reason: str, backend: str) -> FitResult:
+        if not allow_m3_approx_fallback:
+            raise RuntimeError(
+                "M3 hierarchical Bayes was requested but could not run a real Bayesian fit.\n"
+                f"Reason: {reason}\n"
+                "Install compatible Bayes extras (`pip install -e \".[bayes]\"` with pinned "
+                "pymc/bambi/arviz from requirements-bayes.txt), or pass "
+                "allow_m3_approx_fallback=True to authorize the non-Bayesian approximation "
+                "(not equivalent to hierarchical Bayes; not publication-grade)."
+            )
+        approx = _fit_m3_approx(df, metric, apply_acoustic_prior=apply_acoustic_prior)
+        approx.diagnostics["bayes_fallback_reason"] = reason
         approx.diagnostics["note"] = (
-            f"Full Bayes skipped (n={n}, n_technique={n_tech}, n_dynamic={n_dyn}); "
-            "used hierarchical approximation on top of regularized M2."
+            "AUTHORIZED non-Bayesian hierarchical approximation — not posterior sampling. "
+            f"Reason: {reason}"
         )
-        approx.backend = "hierarchical_approx_thin_design"
+        approx.backend = backend
         return approx
 
+    if n < 25 or n_tech < 2:
+        return _approx_or_raise(
+            f"design too thin for full Bayes (n={n}, n_technique={n_tech}, n_dynamic={n_dyn})",
+            "hierarchical_approx_thin_design",
+        )
+
     bmb, az = _bayes_stack()
-    if bmb is not None and az is not None:
-        try:
-            return _fit_m3_bambi(df, metric, bmb=bmb, az=az)
-        except Exception as exc:  # noqa: BLE001
-            approx = _fit_m3_approx(df, metric)
-            approx.diagnostics["bayes_fallback_reason"] = str(exc)
-            approx.diagnostics["note"] = (
-                "Full Bambi/PyMC fit failed; used hierarchical approximation. "
-                f"Reason: {exc}"
-            )
-            approx.backend = "hierarchical_approx_after_bayes_fail"
-            return approx
-    return _fit_m3_approx(df, metric)
+    if bmb is None or az is None:
+        return _approx_or_raise(
+            "Bambi/ArviZ import failed (missing or incompatible Bayes stack)",
+            "hierarchical_approx_no_pymc",
+        )
+    try:
+        return _fit_m3_bambi(
+            df, metric, bmb=bmb, az=az, apply_acoustic_prior=apply_acoustic_prior
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _approx_or_raise(str(exc), "hierarchical_approx_after_bayes_fail")
 
 
-def _fit_m3_approx(df: pd.DataFrame, metric: str) -> FitResult:
+def _fit_m3_approx(
+    df: pd.DataFrame, metric: str, *, apply_acoustic_prior: bool = True
+) -> FitResult:
     """Corpus-level partial pooling + MIDI smooth (no PyMC required)."""
-    base = _fit_m2(df, metric)
+    base = _fit_m2(df, metric, apply_acoustic_prior=apply_acoustic_prior)
     corpus_effects = (
         df.groupby("corpus_id")["log_ratio"].agg(n="count", mean="mean", sd="std").reset_index().fillna(0.3)
     )
@@ -310,62 +375,127 @@ def _fit_m3_approx(df: pd.DataFrame, metric: str) -> FitResult:
     base.params["corpus_pooling_applied"] = True
     base.params["transport_sd"] = max(float(base.params.get("transport_sd", 0.12)), tau)
     base.diagnostics["note"] = (
-        "Hierarchical approximation: M2 surface + technique centers pooled toward grand mean; "
-        "corpus_effects stored for audit. Install bayes extras for full Bambi/PyMC."
+        "Hierarchical approximation (NOT Bayesian sampling): M2 surface + technique centers "
+        "pooled toward grand mean; corpus_effects stored for audit."
     )
     base.diagnostics["corpus_pooling_applied"] = True
+    base.diagnostics["is_bayesian"] = False
     return base
 
 
-def _fit_m3_bambi(df: pd.DataFrame, metric: str, *, bmb, az) -> FitResult:
+def _corpus_hierarchy_identifiable(data: pd.DataFrame) -> bool:
+    """True only if at least one technique appears in ≥2 corpora (not confounded)."""
+    if "corpus_id" not in data.columns:
+        return False
+    return bool((data.groupby("technique")["corpus_id"].nunique() > 1).any())
+
+
+def _fit_m3_bambi(
+    df: pd.DataFrame,
+    metric: str,
+    *,
+    bmb,
+    az,
+    apply_acoustic_prior: bool = True,
+) -> FitResult:
     import os
     import warnings
 
-    # Silence noisy Windows compiler probes; Python backend is fine for small n
     os.environ.setdefault("PYTENSOR_FLAGS", "cxx=")
 
     data = df.copy()
+    # Observation SE from EWSD CIs — used as inverse-variance weights / sigma floor
     data["se"] = data["se_log_obs"].fillna(0.25).clip(lower=0.05)
+    data["obs_weight"] = 1.0 / (data["se"] ** 2)
+    data["obs_weight"] = data["obs_weight"] / data["obs_weight"].mean()
+    # Prefer measured dynamics in the likelihood design
+    data_meas = data[~data["dynamic"].astype(str).str.lower().isin({"unspecified", "unknown"})]
+    if len(data_meas) >= max(20, int(0.5 * len(data))):
+        data = data_meas
+
     n_tech = int(data["technique"].nunique())
     n_dyn = int(data["dynamic"].nunique())
     n = len(data)
-    # Adaptive formula: tiny bridges cannot support full technique:bs(midi)+dynamic
+    use_group = _corpus_hierarchy_identifiable(data)
+    group_term = " + (1|corpus_id)" if use_group else ""
+
     if n < 20 or n_tech == 1:
-        # Bambi rejects 0+technique with a single category
         if n_tech == 1 and n_dyn <= 1:
-            formula = "log_ratio ~ 1"
+            formula = f"log_ratio ~ 1{group_term}"
         elif n_tech == 1:
-            formula = "log_ratio ~ 1 + C(dynamic)"
+            formula = f"log_ratio ~ 1 + C(dynamic){group_term}"
         elif n_dyn > 1:
-            formula = "log_ratio ~ 0 + technique + C(dynamic)"
+            formula = f"log_ratio ~ 0 + technique + C(dynamic){group_term}"
         else:
-            formula = "log_ratio ~ 0 + technique"
+            formula = f"log_ratio ~ 0 + technique{group_term}"
         draws, tune, chains = 300, 300, 2
     elif n < 60:
-        formula = "log_ratio ~ 0 + technique + technique:bs(midi, df=3) + C(dynamic)"
+        formula = (
+            f"log_ratio ~ 0 + technique + technique:bs(midi, df=3) + C(dynamic){group_term}"
+        )
         draws, tune, chains = 400, 400, 2
     else:
-        formula = "log_ratio ~ 0 + technique + technique:bs(midi, df=4) + technique:C(dynamic)"
+        formula = (
+            f"log_ratio ~ 0 + technique + technique:bs(midi, df=4) "
+            f"+ technique:C(dynamic){group_term}"
+        )
         draws, tune, chains = 500, 500, 2
 
+    # Note: heteroskedastic SE²+σ² Student-t likelihood is not expressible in stock
+    # Bambi formulas; se_log_obs is retained for audit / future PyMC custom likelihood.
+    # Inverse-variance enters M2 WLS; here we floor residual scale awareness via transport_sd.
+    weighted = False
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="divide by zero encountered")
-        model = bmb.Model(formula, data, family="t")
-        idata = model.fit(
-            draws=draws,
-            tune=tune,
-            chains=chains,
-            target_accept=0.9,
-            progressbar=False,
-        )
+        try:
+            model = bmb.Model(formula, data, family="t")
+            idata = model.fit(
+                draws=draws,
+                tune=tune,
+                chains=chains,
+                target_accept=0.9,
+                progressbar=False,
+            )
+        except Exception:
+            if group_term:
+                formula = formula.replace(group_term, "")
+                use_group = False
+                model = bmb.Model(formula, data, family="t")
+                idata = model.fit(
+                    draws=draws,
+                    tune=tune,
+                    chains=chains,
+                    target_accept=0.9,
+                    progressbar=False,
+                )
+            else:
+                raise
+
     summary = az.summary(idata, var_names=["~mu"], filter_vars="like")
     transport_sd = (
         float(data.groupby("corpus_id")["log_ratio"].mean().std(ddof=0))
         if data["corpus_id"].nunique() > 1
         else 0.15
     )
-    # Attach M2 as fallback surface; primary point predict tries Bambi posterior mean.
-    m2 = _fit_m2(df, metric)
+    if not use_group:
+        # Design cannot identify corpus random effects — external transport uncertainty
+        transport_sd = max(transport_sd, 0.20)
+
+    m2 = _fit_m2(df, metric, apply_acoustic_prior=apply_acoustic_prior)
+    versions = {}
+    try:
+        import bambi as _bmb
+        import pymc as _pm
+        import arviz as _az
+
+        versions = {
+            "bambi": getattr(_bmb, "__version__", "?"),
+            "pymc": getattr(_pm, "__version__", "?"),
+            "arviz": getattr(_az, "__version__", "?"),
+        }
+    except Exception:
+        pass
+
     return FitResult(
         model_id="M3_hierarchical_bayes",
         backend="bambi_pymc",
@@ -383,6 +513,10 @@ def _fit_m3_bambi(df: pd.DataFrame, metric: str, *, bmb, az) -> FitResult:
             "point_predict": "bambi_posterior",
             "train_dynamics": sorted(data["dynamic"].astype(str).unique().tolist()),
             "train_techniques": sorted(data["technique"].astype(str).unique().tolist()),
+            "interval_type": "heuristic_predictive_from_posterior_sd",
+            "observation_se_weighted": weighted,
+            "corpus_group_effect": use_group,
+            "package_versions": versions,
         },
         diagnostics={
             "divergences": int(idata.sample_stats["diverging"].sum().item())
@@ -390,10 +524,26 @@ def _fit_m3_bambi(df: pd.DataFrame, metric: str, *, bmb, az) -> FitResult:
             else None,
             "transport_sd": max(transport_sd, 0.08),
             "formula": formula,
+            "is_bayesian": True,
+            "corpus_group_effect": use_group,
+            "observation_se_weighted": weighted,
+            "package_versions": versions,
             "point_predict": "bambi_posterior_with_m2_fallback",
             "note": (
-                "y_pred prefers Bambi posterior mean of mu; "
-                "falls back to regularized M2 surface if predict() fails."
+                "Bayesian fixed/group-effect Student-t regression on log-ratios. "
+                "Intervals combine posterior sd of mu with transport/heuristic inflate — "
+                "not pure Bayesian credible intervals of Y. "
+                + (
+                    "Includes (1|corpus_id) because ≥1 technique spans multiple corpora."
+                    if use_group
+                    else "No corpus group term: technique and corpus are confounded in this bridge; "
+                    "transport_sd is an external uncertainty floor."
+                )
+                + (
+                    " Observation SE used as fit weights."
+                    if weighted
+                    else " Observation SE not accepted by this Bambi.fit API; se_log_obs stored only."
+                )
             ),
         },
     )
@@ -425,36 +575,44 @@ def _bambi_posterior_effect(
             "se": [0.25],
         }
     )
-    try:
-        pred = model.predict(idata, data=new, inplace=False, kind="mean")
-        arr = None
+    arr = None
+    last_err = None
+    for kind in ("response_params", "mean", "response"):
+        try:
+            pred = model.predict(idata, data=new, inplace=False, kind=kind)
+        except Exception as exc:  # noqa: BLE001
+            last_err = exc
+            continue
         post = getattr(pred, "posterior", None)
-        if post is not None:
-            for key in ("mu", "log_ratio_mean"):
-                if key in post:
-                    arr = np.asarray(post[key]).reshape(-1)
-                    break
-        if arr is None or arr.size == 0:
-            return None
-        mu = float(np.nanmean(arr))
-        se = float(np.nanstd(arr))
-        if not np.isfinite(mu):
-            return None
-        se = max(se, 0.05)
-        # Register flag from attached M2 midi range when available
-        m = (fit.params.get("models") or {}).get(technique) or {}
-        midi_min, midi_max = m.get("midi_min"), m.get("midi_max")
-        in_range = True
-        if midi_min is not None and midi_max is not None:
-            in_range = float(midi_min) <= float(midi) <= float(midi_max)
-        delta, _ = clip_log_effect(mu, technique)
-        se = float(np.sqrt(se**2 + transport**2))
-        if not in_range:
-            se = float(np.sqrt(se**2 + 0.15**2))
-            return delta, se, "bambi_posterior_register_extrapolation"
-        return delta, se, "bambi_posterior_mean"
-    except Exception:
+        if post is None:
+            continue
+        for key in ("mu", "log_ratio_mean", "log_ratio"):
+            if key in post:
+                arr = np.asarray(post[key]).reshape(-1)
+                break
+        if arr is not None and arr.size:
+            break
+        arr = None
+    if arr is None or arr.size == 0:
+        if last_err is not None:
+            fit.diagnostics.setdefault("bambi_predict_errors", []).append(str(last_err))
         return None
+    mu = float(np.nanmean(arr))
+    se = float(np.nanstd(arr))
+    if not np.isfinite(mu):
+        return None
+    se = max(se, 0.05)
+    m = (fit.params.get("models") or {}).get(technique) or {}
+    midi_min, midi_max = m.get("midi_min"), m.get("midi_max")
+    in_range = True
+    if midi_min is not None and midi_max is not None:
+        in_range = float(midi_min) <= float(midi) <= float(midi_max)
+    delta, _ = clip_log_effect(mu, technique)
+    se = float(np.sqrt(se**2 + transport**2))
+    if not in_range:
+        se = float(np.sqrt(se**2 + 0.15**2))
+        return delta, se, "bambi_posterior_register_extrapolation"
+    return delta, se, "bambi_posterior_mean"
 
 
 def _effect_from_fit(fit: FitResult, technique: str, dynamic: str, midi: float) -> tuple[float, float, str]:
@@ -617,21 +775,30 @@ def predict_transfer(
             target_dyn = str(r.get("dynamic", "unspecified"))
             from ..dynamics import is_adequate_dynamic_pair
 
-            if bridge_dyns:
-                effect_dyn, dyn_flag, dyn_dist = map_zenodo_dynamic_to_bridge(target_dyn, bridge_dyns)
-            else:
-                effect_dyn, dyn_flag, dyn_dist = target_dyn, "dynamic_exact", 0.0
+            measured_bridge_dyns = [
+                d
+                for d in (bridge_dyns or [])
+                if str(d).lower() not in {"unspecified", "unknown", "nan", ""}
+            ]
+            unknown_bridge_dynamic = not measured_bridge_dyns
 
-            dyn_ok = is_adequate_dynamic_pair(target_dyn, effect_dyn, max_dynamic_distance)
+            if measured_bridge_dyns:
+                effect_dyn, dyn_flag, dyn_dist = map_zenodo_dynamic_to_bridge(
+                    target_dyn, measured_bridge_dyns
+                )
+            else:
+                effect_dyn, dyn_flag, dyn_dist = "unspecified", "bridge_dynamic_unknown", np.nan
+
+            dyn_ok = (not unknown_bridge_dynamic) and is_adequate_dynamic_pair(
+                target_dyn, effect_dyn, max_dynamic_distance
+            )
             if strict_dynamics and not dyn_ok:
-                # still record as extrapolated row for diagnostics
                 pass
 
             delta, se, model_flag = _effect_from_fit(fit, tech, effect_dyn, float(r["midi"]))
             delta, clipped = clip_log_effect(delta, tech)
 
-            # Inflate uncertainty for weaker support (calibrated when available)
-            if not dyn_ok:
+            if not dyn_ok or unknown_bridge_dynamic:
                 se = float(np.sqrt(se**2 + inf_dyn**2))
             if "register_extrapolation" in model_flag:
                 se = float(np.sqrt(se**2 + inf_reg**2))
@@ -647,7 +814,9 @@ def predict_transfer(
             cut = outlier_cut.get(coll, outlier_cut.get("*", np.inf))
             is_outlier = bool(y0 > cut)
 
-            if dyn_ok and model_flag in supported_flags:
+            if unknown_bridge_dynamic:
+                support_level = "extrapolated_dynamic"
+            elif dyn_ok and model_flag in supported_flags:
                 support_level = "supported"
             elif dyn_ok and "register_extrapolation" in model_flag:
                 support_level = "extrapolated_register"
@@ -666,6 +835,11 @@ def predict_transfer(
 
             yhat = y0 * np.exp(delta)
             half = apply_conformal_halfwidth(se, calibration)
+            interval_type = str(
+                fit.params.get("interval_type")
+                or fit.diagnostics.get("interval_type")
+                or "heuristic_predictive"
+            )
             rows.append(
                 {
                     "instrument": r.get("instrument"),
@@ -676,6 +850,9 @@ def predict_transfer(
                     "dynamic_match": dyn_flag,
                     "dynamic_distance": dyn_dist,
                     "dynamic_adequate": dyn_ok,
+                    "bridge_dynamic_support": "unknown"
+                    if unknown_bridge_dynamic
+                    else "measured",
                     "midi": r.get("midi"),
                     "note": r.get("note"),
                     "metric": fit.metric,
@@ -689,6 +866,7 @@ def predict_transfer(
                     "y_pred_hi95": float(yhat * np.exp(half)),
                     "combined_se_log": se,
                     "interval_halfwidth_log": half,
+                    "interval_type": interval_type,
                     "model_flag": model_flag,
                     "support_level": support_level,
                     "support_flag": f"{model_flag}|{dyn_flag}",

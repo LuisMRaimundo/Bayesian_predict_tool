@@ -47,9 +47,9 @@ Example: bridge sordina **forte** supports only Zenodo **ff**.
 
 ## Recommended use
 
-1. Run **Preflight**.
-2. Keep **Strict dynamics** ON.
-3. Prefer **M2** unless the bridge is rich (many techniques/dynamics) and Bayes extras work.
+1. Run **Preflight**. Prefer **same-collection** bridges (default); cross-collection pairs are `transport_prior` only if explicitly allowed.
+2. Keep **Strict dynamics** ON. Techniques with `dynamic=unspecified` are **not** treated as measured at pp/mf/ff.
+3. Prefer **M2** for exploratory work. Do **not** use M3 unless the Bayes stack is installed and the run reports `backend=bambi_pymc` (no silent approx).
 4. Publish/analyse only this triad (yellow-highlighted in the Excel workbook):
    1. **File** — your output `.xlsx`
    2. **Page** — **`Predictions_supported`**

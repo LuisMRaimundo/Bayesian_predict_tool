@@ -62,7 +62,9 @@ def calibrate_from_bridge(
         if len(train) < min_train or len(test) == 0:
             continue
         try:
-            fit = fit_model(train, model_id=model_id, metric=metric)
+            fit = fit_model(
+                train, model_id=model_id, metric=metric, allow_m3_approx_fallback=True
+            )
         except Exception:
             continue
         n_folds += 1

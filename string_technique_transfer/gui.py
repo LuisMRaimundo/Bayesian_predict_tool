@@ -41,7 +41,8 @@ class STTApp(ttk.Frame):
         self.instrument = tk.StringVar(value="Violin")
         self.model_id = tk.StringVar(value="M2_midi_gam")
         self.metric = tk.StringVar(value="EWSD_score_acoustic_balanced")
-        self.same_collection = tk.BooleanVar(value=False)
+        self.same_collection = tk.BooleanVar(value=True)
+        self.allow_m3_approx = tk.BooleanVar(value=False)
         self.strict_dynamics = tk.BooleanVar(value=True)
         self.output_path = tk.StringVar(value=str(DEFAULT_OUT / "transfer_audit.xlsx"))
         self.status = tk.StringVar(value="Ready.")
@@ -125,13 +126,18 @@ class STTApp(ttk.Frame):
         ttk.Entry(row, textvariable=self.metric).pack(side="left", fill="x", expand=True)
         ttk.Checkbutton(
             mf,
-            text="Require same-collection pairing (strict bridge)",
+            text="Require same-collection pairing (recommended; else pairs are transport_prior)",
             variable=self.same_collection,
         ).pack(anchor="w", pady=4)
         ttk.Checkbutton(
             mf,
             text="Strict dynamics (only adequate matches, e.g. f→ff; exclude pp/mf if unsupported)",
             variable=self.strict_dynamics,
+        ).pack(anchor="w", pady=2)
+        ttk.Checkbutton(
+            mf,
+            text="Allow non-Bayesian M3 approx fallback (off = hard fail if Bayes stack missing)",
+            variable=self.allow_m3_approx,
         ).pack(anchor="w", pady=2)
 
         # Output
@@ -229,6 +235,7 @@ class STTApp(ttk.Frame):
             model_id=self.model_id.get(),
             require_same_collection=self.same_collection.get(),
             strict_dynamics=self.strict_dynamics.get(),
+            allow_m3_approx_fallback=self.allow_m3_approx.get(),
             run_blocked_cv=True,
         )
 

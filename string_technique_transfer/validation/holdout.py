@@ -41,7 +41,9 @@ def holdout_bridge_validation(
         )
         return pd.DataFrame(), summary
 
-    fit = fit_model(train, model_id=model_id, metric=metric)
+    fit = fit_model(
+        train, model_id=model_id, metric=metric, allow_m3_approx_fallback=True
+    )
     rows = []
     for _, r in test.iterrows():
         delta, se, flag = _effect_from_fit(

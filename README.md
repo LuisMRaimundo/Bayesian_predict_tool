@@ -5,9 +5,11 @@ Local research tool for **instrument-agnostic** technique transfer of spectral-d
 **Repository:** https://github.com/LuisMRaimundo/Bayesian_predict_tool  
 **Local folder:** `C:\Users\lmr20\Desktop\Bayesian Tool`
 
+**Scientific status:** exploratory transfer / Excel export tool. Not publication-grade hierarchical Bayes until the items in **[AUDIT_RESPONSE.md](AUDIT_RESPONSE.md)** are closed on your corpus. Default bridge policy is **same-collection**; M3 does **not** silently fall back to a non-Bayesian approx.
+
 See [METHODOLOGY.md](METHODOLOGY.md) for the scientific protocol.  
 Full math / algorithms / code-line map + tutorial: **[TECHNICAL_MANUAL.md](TECHNICAL_MANUAL.md)** (open in [StackEdit](https://stackedit.io); LaTeX twin in `docs/TECHNICAL_MANUAL.tex`).  
-Reproduce: [REPRODUCE.md](REPRODUCE.md) · Literature priors: [LITERATURE_ALIGNMENT.md](LITERATURE_ALIGNMENT.md)
+Reproduce: [REPRODUCE.md](REPRODUCE.md) · Literature priors: [LITERATURE_ALIGNMENT.md](LITERATURE_ALIGNMENT.md) · Bayes pins: [requirements-bayes.txt](requirements-bayes.txt)
 
 ## Run history (per run)
 
@@ -58,10 +60,12 @@ python -m string_technique_transfer.cli --bridge ... --target ... --preflight-on
 ## Robustness features
 
 - Zenodo **MEDIA** target (`Violin_Media` M/N/O) + ORCH/IOWA sheets  
-- Strict dynamics map; winsorize + soft acoustic shrink/clip (literature-aligned, not activated EWSD laws)  
-- M0–M3 comparison, blocked CV, residual/conformal **calibration**, holdout pack, sensitivity grid  
-- M3: Bambi posterior mean when available, else hierarchical approx with corpus pooling  
-- Excel: `Predictions_supported!y_pred` + `Model_comparison` / `Calibration` / `Holdout_*` / `Sensitivity`  
+- **Same-collection** bridge pairing by default; cross-collection pairs labelled `transport_prior` only if allowed  
+- Unspecified technique dynamics kept as `unspecified` (not invented from ordinario)  
+- Winsorize responses; acoustic prior applied **once** at model coefficients (not per row)  
+- M0–M3 comparison, blocked CV (winsor inside folds), calibration, holdout, sensitivity  
+- M3: real Bambi/PyMC only; **no silent approx** unless `--allow-m3-approx` / GUI checkbox  
+- Excel: `Predictions_supported!y_pred` + validation sheets; intervals are **heuristic predictive**  
 - Run history HTML under `outputs/run_history/` (uploaded Excel names + charts after Fit)
 
 ## Tests
@@ -75,7 +79,7 @@ pytest -q
 
 | ID | Use |
 |---|---|
-| `M2_midi_gam` | **Default / recommended** |
-| `M3_hierarchical_bayes` | Rich bridges only; thin designs auto-fallback |
-| `M1_register_dynamic` | When many dynamics×registers exist |
+| `M2_midi_gam` | **Default / exploratory recommended** |
+| `M1_register_dynamic` | Register×dynamic cells (re-validate after dynamic-label fixes) |
 | `M0_global_factor` | Baseline sanity check |
+| `M3_hierarchical_bayes` | Only with pinned Bayes stack (`requirements-bayes.txt`); fails hard if unavailable |

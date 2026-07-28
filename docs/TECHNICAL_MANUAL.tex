@@ -59,7 +59,8 @@ Lines: \texttt{bridge.py} 19--161; shrink in \texttt{acoustics.py} 48--54.
 \subsection{M2 (recommended)} Robust constant or WLS B-spline on MIDI
 (\texttt{\_fit\_m2}, 115--236). No spline extrapolation outside bridge MIDI.
 In-range GAM blend: $\widehat\delta=0.7\,\widehat\delta_{\mathrm{raw}}+0.3\mu^{\mathrm{center}}$.
-\subsection{M3} Hierarchical Bayes if rich design; else M2-based approx.
+\subsection{M3} Bambi/PyMC when installed; hard fail unless approx fallback authorized.
+Optional \texttt{(1|corpus\_id)} only if a technique spans multiple corpora.
 Full Bambi stores \texttt{idata}; point prediction uses attached M2 models
 (\texttt{\_fit\_m3\_bambi}, 295--373).
 

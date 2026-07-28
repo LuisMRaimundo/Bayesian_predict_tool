@@ -21,7 +21,11 @@ def compare_models(
     rows = []
     for mid in ids:
         tab = blocked_pitch_cv(
-            bridge, model_id=mid, metric=metric, block_semitones=block_semitones
+            bridge,
+            model_id=mid,
+            metric=metric,
+            block_semitones=block_semitones,
+            allow_m3_approx_fallback=True,
         )
         if len(tab) == 0:
             rows.append({"model_id": mid, "status": "empty", "mae_log": np.nan, "rmse_log": np.nan})
