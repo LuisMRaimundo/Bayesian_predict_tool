@@ -83,8 +83,15 @@ def test_run_history_written(tmp_path):
     assert "run_history_report" in fit.diagnostics
     report = Path(fit.diagnostics["run_history_report"])
     assert report.exists()
-    text = report.read_text(encoding="utf-8")
-    assert "Run report" in text
-    assert "dummy_bridge.xlsx" in text or "Bridge file" in text
+    assert report.suffix.lower() == ".html"
+    html = report.read_text(encoding="utf-8")
+    assert "Run report" in html
+    assert "Uploaded Excel files" in html
+    assert "dummy_bridge.xlsx" in html
+    assert "dummy_target.xlsx" in html
+    md = Path(fit.diagnostics["run_history_report_md"])
+    assert md.exists()
+    assert "dummy_bridge.xlsx" in md.read_text(encoding="utf-8")
     assert (hist / "INDEX.md").exists()
     assert (hist / "index.csv").exists()
+    assert "uploaded_excels" in (hist / "index.csv").read_text(encoding="utf-8")

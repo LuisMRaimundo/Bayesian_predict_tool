@@ -162,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"supported={n_sup} / all={len(preds)}")
     print(f"wrote {out}")
     if fit.diagnostics.get("run_history_report"):
-        print(f"Run history: {fit.diagnostics['run_history_report']}")
+        print(f"Run history HTML: {fit.diagnostics['run_history_report']}")
     return 0
 
 

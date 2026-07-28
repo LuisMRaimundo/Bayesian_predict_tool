@@ -122,6 +122,7 @@ def start_run(
             "run_dir": str(run_dir),
             "manifest_json": str(run_dir / "run_manifest.json"),
             "report_md": str(run_dir / "RUN_REPORT.md"),
+            "report_html": str(run_dir / "RUN_REPORT.html"),
         },
     }
     _write_manifest(record)
@@ -185,6 +186,14 @@ def finalize_run(
         record["extra"] = extra
 
     run_dir = Path(record["paths"]["run_dir"])
+    from .run_report_html import write_html_report
+
+    html_path = write_html_report(
+        record,
+        bridge_ratios=bridge_ratios,
+        predictions=predictions,
+    )
+    record["paths"]["report_html"] = str(html_path)
     _write_manifest(record)
     report_path = _write_markdown(record)
     if preflight_df is not None and len(preflight_df):
@@ -203,7 +212,8 @@ def finalize_run(
         predictions.head(500).to_csv(run_dir / "predictions_all_head.csv", index=False)
 
     _append_index(record)
-    return report_path
+    # Prefer HTML as the primary human-facing history link; MD remains as twin.
+    return html_path if html_path.exists() else report_path
 
 
 def _write_manifest(record: dict[str, Any]) -> None:
@@ -214,6 +224,12 @@ def _write_manifest(record: dict[str, Any]) -> None:
 
 def _write_markdown(record: dict[str, Any]) -> Path:
     path = Path(record["paths"]["report_md"])
+    bridge_files = record.get("inputs", {}).get("bridge_files") or []
+    tgt = record.get("inputs", {}).get("target_file") or {}
+    uploaded_names = [f.get("name") or Path(str(f.get("path") or "")).name for f in bridge_files]
+    target_name = tgt.get("name") or Path(str(tgt.get("path") or "")).name
+    html_name = Path(record.get("paths", {}).get("report_html") or "RUN_REPORT.html").name
+
     lines = [
         f"# Run report — `{record['run_id']}`",
         "",
@@ -224,21 +240,32 @@ def _write_markdown(record: dict[str, Any]) -> Path:
         f"- **Started (UTC):** {record.get('started_utc')}",
         f"- **Finished (UTC):** {record.get('finished_utc')}",
         f"- **Duration (s):** {record.get('duration_seconds')}",
+        f"- **Illustrated HTML:** [`{html_name}`]({html_name})",
         "",
-        "## Tool",
+        "## Uploaded Excel files",
         "",
     ]
+    if uploaded_names:
+        for i, name in enumerate(uploaded_names, start=1):
+            lines.append(f"{i}. `{name}` *(bridge)*")
+    else:
+        lines.append("- *(no bridge Excel files recorded)*")
+    if target_name:
+        lines.append(f"- `{target_name}` *(target ordinario)*")
+    else:
+        lines.append("- *(no target Excel recorded)*")
+
+    lines += ["", "## Tool", ""]
     for k, v in (record.get("tool") or {}).items():
         lines.append(f"- **{k}:** `{v}`")
 
-    lines += ["", "## Inputs", ""]
-    for i, f in enumerate(record.get("inputs", {}).get("bridge_files") or [], start=1):
-        lines.append(f"### Bridge file {i}")
+    lines += ["", "## Inputs (paths & hashes)", ""]
+    for i, f in enumerate(bridge_files, start=1):
+        lines.append(f"### Bridge file {i}: `{f.get('name')}`")
         for k, v in f.items():
             lines.append(f"- **{k}:** `{v}`")
         lines.append("")
-    tgt = record.get("inputs", {}).get("target_file") or {}
-    lines.append("### Target ordinario")
+    lines.append(f"### Target ordinario: `{target_name}`")
     for k, v in tgt.items():
         lines.append(f"- **{k}:** `{v}`")
     lines.append(f"- **instrument:** `{record.get('inputs', {}).get('instrument')}`")
@@ -295,6 +322,7 @@ def _write_markdown(record: dict[str, Any]) -> Path:
         "1. Excel audit file (if present) → sheet **Predictions_supported** → column **y_pred**",
         "2. Or CSV in this folder: `predictions_supported.csv`",
         "",
+        f"Illustrated HTML twin: `{html_name}`",
         f"Machine-readable twin: `{Path(record['paths']['manifest_json']).name}`",
         "",
     ]
@@ -317,6 +345,20 @@ def _append_index(record: dict[str, Any]) -> None:
         "target": ((record.get("inputs") or {}).get("target_file") or {}).get("name"),
         "output_xlsx": ((record.get("outputs") or {}).get("excel_audit") or {}).get("name"),
         "report_md": record.get("paths", {}).get("report_md"),
+        "report_html": record.get("paths", {}).get("report_html"),
+        "uploaded_excels": "; ".join(
+            [
+                *(
+                    f.get("name") or Path(str(f.get("path") or "")).name
+                    for f in ((record.get("inputs") or {}).get("bridge_files") or [])
+                ),
+                *(
+                    [((record.get("inputs") or {}).get("target_file") or {}).get("name")]
+                    if ((record.get("inputs") or {}).get("target_file") or {}).get("name")
+                    else []
+                ),
+            ]
+        ),
     }
     idx_csv = root / "index.csv"
     df = pd.DataFrame([row])
@@ -329,13 +371,15 @@ def _append_index(record: dict[str, Any]) -> None:
     line = (
         f"| `{row['run_id']}` | {row['kind']} | {row['status']} | {row['started_local']} | "
         f"{row['model_id']} | {row['n_bridge_files']} | {row['target']} | "
-        f"[RUN_REPORT.md]({row['run_id']}/RUN_REPORT.md) |"
+        f"{row['uploaded_excels']} | "
+        f"[HTML]({row['run_id']}/RUN_REPORT.html) / [MD]({row['run_id']}/RUN_REPORT.md) |"
     )
     header = (
         "# Run history index\n\n"
-        "Each Fit & predict / Preflight writes a timestamped folder under this directory.\n\n"
-        "| run_id | kind | status | started_local | model | n_bridge_files | target | report |\n"
-        "|---|---|---|---|---|---:|---|---|\n"
+        "Each Fit & predict / Preflight writes a timestamped folder under this directory.\n"
+        "Open **RUN_REPORT.html** for the illustrated compilation (charts + all uploaded Excel names).\n\n"
+        "| run_id | kind | status | started_local | model | n_bridge_files | target | uploaded_excels | report |\n"
+        "|---|---|---|---|---|---:|---|---|---|\n"
     )
     if idx_md.exists():
         text = idx_md.read_text(encoding="utf-8")

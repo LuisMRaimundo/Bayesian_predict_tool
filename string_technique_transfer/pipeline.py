@@ -241,7 +241,13 @@ def run_transfer(
                 }
             )
         extras.append({"item": "run_history_id", "value": record["run_id"]})
-        extras.append({"item": "run_history_report", "value": record["paths"]["report_md"]})
+        extras.append(
+            {
+                "item": "run_history_report",
+                "value": record["paths"].get("report_html") or record["paths"]["report_md"],
+            }
+        )
+        extras.append({"item": "run_history_report_md", "value": record["paths"]["report_md"]})
         if extras:
             quality = pd.concat([quality, pd.DataFrame(extras)], ignore_index=True)
 
@@ -289,6 +295,8 @@ def run_transfer(
         )
         fit.diagnostics["run_history_id"] = record["run_id"]
         fit.diagnostics["run_history_report"] = str(report)
+        fit.diagnostics["run_history_report_md"] = record["paths"].get("report_md")
+        fit.diagnostics["run_history_report_html"] = record["paths"].get("report_html")
         return fit, bridge, preds, out_path, pf, cv_table
     except Exception as exc:  # noqa: BLE001
         log_operation(record, "failed", {"error": str(exc)})

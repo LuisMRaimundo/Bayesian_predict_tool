@@ -351,12 +351,20 @@ class STTApp(ttk.Frame):
             )
             self._ui_log("\n=== PREFLIGHT ===")
             self._ui_log(pf.as_dataframe().to_string(index=False))
-            self._ui_log(f"Run history: {report}")
+            uploaded = "\n".join(f"  - {Path(p).name}" for p in self.bridge_paths)
+            if self.target_path.get():
+                uploaded += f"\n  - {Path(self.target_path.get()).name} (target)"
+            self._ui_log(f"Run history HTML: {report}")
+            self._ui_log("Uploaded Excel files:\n" + uploaded)
             self._ui_status("Preflight PASS" if pf.ok else "Preflight FAIL")
             msg = (
-                f"Preflight PASS — safe to Fit & predict.\n\nHistory:\n{report}"
+                f"Preflight PASS — safe to Fit & predict.\n\n"
+                f"Uploaded Excel files:\n{uploaded}\n\n"
+                f"Illustrated history (HTML):\n{report}"
                 if pf.ok
-                else f"Preflight FAIL — see log.\n\nHistory:\n{report}"
+                else f"Preflight FAIL — see log.\n\n"
+                f"Uploaded Excel files:\n{uploaded}\n\n"
+                f"Illustrated history (HTML):\n{report}"
             )
             self.master.after(
                 0,
@@ -446,9 +454,14 @@ class STTApp(ttk.Frame):
                         .to_string()
                     )
             hist = fit.diagnostics.get("run_history_report", "")
+            hist_html = fit.diagnostics.get("run_history_report_html") or hist
+            uploaded = "\n".join(
+                f"  - {Path(p).name}" for p in self.bridge_paths
+            ) + (f"\n  - {Path(self.target_path.get()).name} (target)" if self.target_path.get() else "")
             self._ui_log(f"\nExcel audit: {out_path}")
-            if hist:
-                self._ui_log(f"Run history report: {hist}")
+            if hist_html:
+                self._ui_log(f"Run history HTML: {hist_html}")
+            self._ui_log("Uploaded Excel files:\n" + uploaded)
             self._ui_log("=== USE THESE (mimic special technique on IOWA/ORCHIDEA) ===")
             self._ui_log(f"1. FILE NAME : {Path(out_path).name}")
             self._ui_log("2. PAGE NAME : Predictions_supported")
@@ -465,7 +478,8 @@ class STTApp(ttk.Frame):
                 f"1. FILE: {Path(out_path).name}\n"
                 f"2. PAGE: Predictions_supported\n"
                 f"3. COLUMN: y_pred\n\n"
-                f"History:\n{hist}"
+                f"Uploaded Excel files:\n{uploaded}\n\n"
+                f"Illustrated history (HTML):\n{hist_html}"
             )
             self.master.after(0, lambda m=done_msg: messagebox.showinfo("Done", m))
         except Exception as exc:  # noqa: BLE001
