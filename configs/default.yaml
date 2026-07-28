@@ -1,0 +1,12 @@
+metric: EWSD_score_acoustic_balanced
+model_id: M2_midi_gam
+require_same_collection: false
+instruments:
+  - Violin
+  - Viola
+  - Cello
+  - Double Bass
+estimate_class: model_derived_synthetic
+label: >
+  Model-derived synthetic estimates of missing technique conditions,
+  transported from external corpora and conditioned on observed ordinario profiles.
