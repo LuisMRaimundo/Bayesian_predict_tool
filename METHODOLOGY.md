@@ -1,4 +1,7 @@
-# Methodology — String Technique Transfer (local)
+# Methodology — String Technique Transfer
+
+**Repository:** https://github.com/LuisMRaimundo/Bayesian_predict_tool  
+**Local folder:** `C:\Users\lmr20\Desktop\Bayesian Tool`
 
 ## Scientific claim
 
@@ -52,3 +55,8 @@ Example: bridge sordina **forte** supports only Zenodo **ff**.
    2. **Page** — **`Predictions_supported`**
    3. **Column** — **`y_pred`**
 5. Report transport-prior fraction and blocked-CV errors with any released table.
+6. Archive the run via `outputs/run_history/…/RUN_REPORT.html` (lists every uploaded Excel; charts fill after **Fit & predict**). See `INDEX.md` in that folder.
+
+## Run history
+
+Preflight and Fit & predict each write a timestamped folder under `outputs/run_history/`. The primary human artifact is **`RUN_REPORT.html`** (Markdown/JSON/CSV twins alongside). Preflight reports intentionally omit prediction charts and fitted-model fields; transfer reports include them when the pipeline completes.

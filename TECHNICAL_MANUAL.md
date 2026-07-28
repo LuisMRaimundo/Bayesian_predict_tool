@@ -1,7 +1,7 @@
 ---
 title: String Technique Transfer — Technical Manual
 subtitle: Mathematical models, algorithms, code map, and tutorial
-version: 1.1
+version: 1.3
 tool: Bayesian_predict_tool / string_technique_transfer
 stackedit: Open this file in https://stackedit.io (Markdown + KaTeX)
 ---
@@ -12,6 +12,10 @@ stackedit: Open this file in https://stackedit.io (Markdown + KaTeX)
 **Repository:** https://github.com/LuisMRaimundo/Bayesian_predict_tool  
 **Local folder:** `C:\Users\lmr20\Desktop\Bayesian Tool`  
 **How to view equations:** open this file in [StackEdit](https://stackedit.io) (File → Open from disk). All mathematics uses standard LaTeX delimiters (`$$ … $$`, `$…$`).
+
+### v1.3 upgrades (implemented)
+
+- **Illustrated run history:** each Preflight / Fit writes `outputs/run_history/<id>/RUN_REPORT.html` with **all uploaded Excel names**, config, operations, fit/CV, and Chart.js figures (`run_history.py`, `run_report_html.py`). Markdown/JSON/CSV twins remain.
 
 ### v1.2 upgrades (implemented)
 
@@ -87,6 +91,8 @@ Here $c$ indexes a pitch (MIDI / note), $t$ a technique, and $Y$ is the metric (
 | 2 | **Page** | `Predictions_supported` |
 | 3 | **Column** | `y_pred` (yellow) |
 
+7. Open the illustrated history HTML path printed by the GUI (under `outputs/run_history/…/RUN_REPORT.html`).
+
 ### 1.5 CLI quick start
 
 ```bat
@@ -99,7 +105,34 @@ python -m string_technique_transfer.cli ^
   --out outputs\transfer_audit.xlsx
 ```
 
-### 1.6 How to read support levels
+### 1.6 Run history reports
+
+Module: `string_technique_transfer/run_history.py` (+ `run_report_html.py`).
+
+Each GUI/CLI Preflight or transfer creates:
+
+```text
+outputs/run_history/
+  INDEX.md                  # human index (HTML + MD links, uploaded_excels)
+  index.csv
+  <YYYYMMDD_HHMMSS>_<kind>/
+    RUN_REPORT.html         # primary illustrated compilation
+    RUN_REPORT.md
+    run_manifest.json
+    predictions_supported.csv   # after Fit & predict
+    bridge_log_ratios.csv       # after Fit & predict
+    preflight.csv               # when preflight ran
+    …
+```
+
+| Run kind | Always present | Charts / fit / predictions |
+|---|---|---|
+| `preflight` | Uploaded Excel names, paths/hashes, config, operations, preflight table | Empty (expected) |
+| `transfer` (Fit & predict) | Same + Excel audit path | Support doughnut, factors vs MIDI, ordinario vs `y_pred`, medians by dynamic; fit + blocked CV when enabled |
+
+Quality sheet items: `run_history_id`, `run_history_report` (HTML path), `run_history_report_md`.
+
+### 1.7 How to read support levels
 
 | `support_level` | Meaning | Use in papers? |
 |---|---|---|
@@ -108,7 +141,7 @@ python -m string_technique_transfer.cli ^
 | `extrapolated_dynamic` | e.g. bridge $f$ → Zenodo $pp$ | Exploratory only |
 | `extrapolated_register` | MIDI outside bridge range | Exploratory only |
 
-### 1.7 Worked mental example (con sordino @ ff)
+### 1.8 Worked mental example (con sordino @ ff)
 
 1. Bridge pairs give raw ratios $Y_{\mathrm{sord}}/Y_{\mathrm{ord}}$ near MIDI 55–91.  
 2. After winsorize + acoustic shrink, M2 fits a **robust constant**  
@@ -621,6 +654,8 @@ $$
 | Blocked CV | `validation/blocked_cv.py` | 30–120 | §9 |
 | MEDIA loader (col O) | `io/loaders.py` | `load_zenodo_media_ordinario` | Media pp/mf/ff |
 | Excel highlight triad | `export/excel_audit.py` | `PRIMARY_SHEET/COLUMN` | file / page / `y_pred` |
+| Run history folder + index | `run_history.py` | `start_run` / `finalize_run` | §1.6 |
+| Illustrated HTML report | `run_report_html.py` | `write_html_report` | charts + uploaded Excel names |
 | Model IDs | `models/base.py` | 8–13 | `MODEL_CHOICES` |
 
 ---

@@ -42,6 +42,8 @@ Or GUI: `python run_gui.py` → collection **MEDIA** → Fit & predict.
 
 Also inspect: `Model_comparison`, `Calibration`, `Holdout_summary`, `Blocked_CV`.
 
+**Run history:** open the path printed as `Run history HTML:` (under `outputs\run_history\<id>\RUN_REPORT.html`). It lists every uploaded Excel and charts the transfer (empty charts are normal for `--preflight-only`). Index: `outputs\run_history\INDEX.md`.
+
 ## 5. Scientific constraints
 
 See `LITERATURE_ALIGNMENT.md` — soft priors only; no activated universal EWSD mute law from literature.

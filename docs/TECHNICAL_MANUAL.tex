@@ -28,6 +28,13 @@ Prefer model \textbf{M2}, Zenodo source \textbf{MEDIA}
 (\texttt{Violin\_Media} column O = Media ff), sheet
 \texttt{Predictions\_supported}, column \texttt{y\_pred}.
 
+\subsection{Run history}
+Each Preflight / Fit writes
+\texttt{outputs/run\_history/<id>/RUN\_REPORT.html}
+(all uploaded Excel names, config, operations, charts after Fit).
+Twins: \texttt{RUN\_REPORT.md}, \texttt{run\_manifest.json}, CSV snapshots.
+Index: \texttt{INDEX.md}. Code: \texttt{run\_history.py}, \texttt{run\_report\_html.py}.
+
 \section{Core transport identity}
 \[
 \delta=\log\frac{Y_t}{Y_{\mathrm{ord}}},\qquad

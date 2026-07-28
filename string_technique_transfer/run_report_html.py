@@ -150,7 +150,18 @@ def write_html_report(
         items = "".join(f"<li><b>{esc(k)}:</b> <code>{esc(v)}</code></li>" for k, v in (summ or {}).items())
         summ_blocks.append(f"<div class='card'><h3>{esc(name)}</h3><ul>{items}</ul></div>")
 
-    fit = record.get("fit") or {}
+    fit = dict(record.get("fit") or {})
+    cfg = record.get("config") or {}
+    # Preflight / failed runs have no fit payload — fall back to selected config.
+    if not fit.get("model_id"):
+        fit.setdefault("model_id", cfg.get("model_id"))
+    if not fit.get("metric"):
+        fit.setdefault("metric", cfg.get("metric"))
+    if not fit.get("backend"):
+        fit.setdefault("backend", "(not fitted — Preflight or failed run)")
+    if fit.get("bridge_n") in (None, ""):
+        fit.setdefault("bridge_n", "—")
+
     cv = record.get("blocked_cv") or {}
     excel = (record.get("outputs") or {}).get("excel_audit") or {}
     n_sup = 0
@@ -164,7 +175,52 @@ def write_html_report(
         n_all = int(pred_sum["n_rows"])
 
     status = str(record.get("status") or "")
-    status_class = "ok" if status == "ok" else ("warn" if "preflight" in status else "bad")
+    kind = str(record.get("kind") or "")
+    status_class = "ok" if status == "ok" else ("warn" if "preflight" in status or kind == "preflight" else "bad")
+    has_charts = bool(
+        charts.get("support_labels")
+        or charts.get("bridge_by_technique")
+        or charts.get("supported")
+    )
+    is_preflight = kind == "preflight" or status in {"preflight_fail", "preflight"}
+    if is_preflight and not has_charts:
+        results_note = (
+            "This is a <b>Preflight</b> report. Charts, fitted-model fields, and predictions "
+            "appear only after <b>Fit &amp; predict</b>."
+        )
+    elif not has_charts:
+        results_note = (
+            "No prediction/bridge chart data was saved for this run "
+            "(failed early, or transfer did not produce pairs)."
+        )
+    else:
+        results_note = (
+            "Charts need an internet connection the first time (Chart.js CDN). "
+            "If boxes stay blank offline, reopen with network or check the CSV twins in this folder."
+        )
+
+    def _chart_box(canvas_id: str, *, tall: bool = False, empty_msg: str) -> str:
+        cls = "chart-box tall" if tall else "chart-box"
+        return (
+            f"<div class='{cls}' data-canvas='{canvas_id}'>"
+            f"<canvas id='{canvas_id}'></canvas>"
+            f"<div class='empty-chart' id='{canvas_id}_empty'>{esc(empty_msg)}</div>"
+            f"</div>"
+        )
+
+    empty_msg = (
+        "No chart data for this run (Preflight does not fit or predict)."
+        if is_preflight
+        else "No chart data available for this run."
+    )
+    cv_list = "".join(f"<li><b>{esc(k)}:</b> <code>{esc(v)}</code></li>" for k, v in cv.items())
+    if not cv_list:
+        if cfg.get("run_blocked_cv") is False:
+            cv_list = "<li>Blocked CV was <b>disabled</b> in config for this run.</li>"
+        elif is_preflight:
+            cv_list = "<li>n/a — Preflight does not run blocked CV.</li>"
+        else:
+            cv_list = "<li>n/a — no blocked-CV table was written.</li>"
 
     doc = f"""<!DOCTYPE html>
 <html lang="en">
@@ -201,8 +257,10 @@ h3 {{ font-size:1rem; margin:0 0 8px; }}
 .stat span {{ color:var(--muted); font:12px system-ui,sans-serif; }}
 .grid2 {{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }}
 .card {{ background:var(--card); border:1px solid var(--line); padding:12px 14px; margin:0 0 12px; }}
-.chart-box {{ background:var(--card); border:1px solid var(--line); padding:10px; height:320px; margin:0 0 14px; }}
+.chart-box {{ position:relative; background:var(--card); border:1px solid var(--line); padding:10px; height:320px; margin:0 0 14px; }}
 .chart-box.tall {{ height:420px; }}
+.chart-box.has-data .empty-chart {{ display:none; }}
+.empty-chart {{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:24px; text-align:center; color:var(--muted); font:13px/1.4 system-ui,sans-serif; background:var(--card); }}
 table {{ width:100%; border-collapse:collapse; font:12.5px/1.35 system-ui,sans-serif; background:var(--card); margin:8px 0 14px; }}
 th, td {{ border-bottom:1px solid var(--line); padding:7px 8px; text-align:left; vertical-align:top; word-break:break-word; }}
 th {{ background:#f0ebe2; position:sticky; top:0; }}
@@ -210,6 +268,7 @@ ul {{ margin:0; padding-left:18px; }}
 code {{ font-family:Consolas, monospace; font-size:12px; }}
 a {{ color:var(--accent); }}
 .callout {{ background:#eef4f1; border-left:3px solid var(--accent); padding:10px 12px; margin:12px 0; }}
+.callout.warn {{ background:#f4eedc; border-left-color:var(--warn); }}
 @media (max-width:900px) {{ .stats,.grid2 {{ grid-template-columns:1fr; }} }}
 </style>
 </head>
@@ -238,8 +297,11 @@ a {{ color:var(--accent); }}
     <div class="stat"><b>{esc(cv.get('mae_log', '—'))}</b><span>Blocked CV MAE (log)</span></div>
   </div>
 
+  <div class="callout{' warn' if not has_charts else ''}">
+    {results_note}
+  </div>
   <div class="callout">
-    <b>Primary result:</b> Excel sheet <code>Predictions_supported</code>, column <code>y_pred</code>
+    <b>Primary result (after Fit &amp; predict):</b> Excel sheet <code>Predictions_supported</code>, column <code>y_pred</code>
     {(' — file <code>' + esc(excel.get('name')) + '</code>') if excel.get('name') else ''}.
     Also see <a href="RUN_REPORT.md">RUN_REPORT.md</a> and <a href="run_manifest.json">run_manifest.json</a>.
   </div>
@@ -267,35 +329,35 @@ a {{ color:var(--accent); }}
   <div class="grid2">
     <div>
       <h3>Support levels</h3>
-      <div class="chart-box"><canvas id="supportChart"></canvas></div>
+      {_chart_box("supportChart", empty_msg=empty_msg)}
     </div>
     <div>
       <h3>Prediction rows by dynamic</h3>
-      <div class="chart-box"><canvas id="dynChart"></canvas></div>
+      {_chart_box("dynChart", empty_msg=empty_msg)}
     </div>
   </div>
   <h3>Bridge transfer factors vs MIDI</h3>
-  <div class="chart-box tall"><canvas id="bridgeChart"></canvas></div>
+  {_chart_box("bridgeChart", tall=True, empty_msg=empty_msg)}
   <h3>Supported: ordinario vs predicted (by MIDI)</h3>
-  <div class="chart-box tall"><canvas id="predChart"></canvas></div>
+  {_chart_box("predChart", tall=True, empty_msg=empty_msg)}
   <h3>Supported medians by dynamic</h3>
-  <div class="chart-box"><canvas id="medChart"></canvas></div>
+  {_chart_box("medChart", empty_msg=empty_msg)}
 
   <h2>Model / CV</h2>
   <div class="grid2">
     <div class="card">
       <h3>Fit</h3>
       <ul>
-        <li><b>model_id:</b> <code>{esc(fit.get('model_id'))}</code></li>
-        <li><b>backend:</b> <code>{esc(fit.get('backend'))}</code></li>
-        <li><b>metric:</b> <code>{esc(fit.get('metric'))}</code></li>
-        <li><b>bridge_n:</b> <code>{esc(fit.get('bridge_n'))}</code></li>
+        <li><b>model_id:</b> <code>{esc(fit.get('model_id') or '—')}</code></li>
+        <li><b>backend:</b> <code>{esc(fit.get('backend') or '—')}</code></li>
+        <li><b>metric:</b> <code>{esc(fit.get('metric') or '—')}</code></li>
+        <li><b>bridge_n:</b> <code>{esc(fit.get('bridge_n') if fit.get('bridge_n') is not None else '—')}</code></li>
       </ul>
     </div>
     <div class="card">
       <h3>Blocked CV</h3>
       <ul>
-        {''.join(f'<li><b>{esc(k)}:</b> <code>{esc(v)}</code></li>' for k,v in cv.items()) or '<li>n/a</li>'}
+        {cv_list}
       </ul>
     </div>
   </div>
@@ -321,8 +383,13 @@ a {{ color:var(--accent); }}
 <script>
 const CHARTS = {json.dumps(charts, ensure_ascii=False)};
 const colors = ['#2f5d50','#3d6e8c','#8a6d2f','#8b3a3a','#5c7a6e','#6b5b95','#c06c3f'];
+function markDrawn(id) {{
+  const box = document.querySelector('[data-canvas=\"' + id + '\"]');
+  if (box) box.classList.add('has-data');
+}}
+function chartReady() {{ return typeof Chart !== 'undefined'; }}
 
-if (CHARTS.support_labels && CHARTS.support_labels.length) {{
+if (chartReady() && CHARTS.support_labels && CHARTS.support_labels.length) {{
   new Chart(document.getElementById('supportChart'), {{
     type: 'doughnut',
     data: {{
@@ -331,8 +398,9 @@ if (CHARTS.support_labels && CHARTS.support_labels.length) {{
     }},
     options: {{ plugins: {{ legend: {{ position: 'bottom' }} }}, maintainAspectRatio: false }}
   }});
+  markDrawn('supportChart');
 }}
-if (CHARTS.pred_dynamic_labels && CHARTS.pred_dynamic_labels.length) {{
+if (chartReady() && CHARTS.pred_dynamic_labels && CHARTS.pred_dynamic_labels.length) {{
   new Chart(document.getElementById('dynChart'), {{
     type: 'bar',
     data: {{
@@ -341,8 +409,9 @@ if (CHARTS.pred_dynamic_labels && CHARTS.pred_dynamic_labels.length) {{
     }},
     options: {{ plugins: {{ legend: {{ display:false }} }}, scales: {{ y: {{ beginAtZero:true, title: {{ display:true, text:'count' }} }} }}, maintainAspectRatio:false }}
   }});
+  markDrawn('dynChart');
 }}
-if (CHARTS.bridge_by_technique) {{
+if (chartReady() && CHARTS.bridge_by_technique) {{
   const ds = Object.entries(CHARTS.bridge_by_technique).map(([tech, o], i) => ({{
     label: tech + ' factor',
     data: o.midi.map((m, j) => ({{ x: m, y: o.factor[j] }})),
@@ -363,8 +432,9 @@ if (CHARTS.bridge_by_technique) {{
       }}
     }}
   }});
+  markDrawn('bridgeChart');
 }}
-if (CHARTS.supported) {{
+if (chartReady() && CHARTS.supported) {{
   const s = CHARTS.supported;
   new Chart(document.getElementById('predChart'), {{
     type: 'line',
@@ -391,8 +461,9 @@ if (CHARTS.supported) {{
       }}
     }}
   }});
+  markDrawn('predChart');
 }}
-if (CHARTS.supported_medians_by_dynamic) {{
+if (chartReady() && CHARTS.supported_medians_by_dynamic) {{
   const m = CHARTS.supported_medians_by_dynamic;
   new Chart(document.getElementById('medChart'), {{
     type: 'bar',
@@ -408,6 +479,12 @@ if (CHARTS.supported_medians_by_dynamic) {{
       plugins: {{ legend: {{ position: 'bottom' }} }},
       scales: {{ y: {{ beginAtZero:true, title: {{ display:true, text:'median metric' }} }} }}
     }}
+  }});
+  markDrawn('medChart');
+}}
+if (!chartReady()) {{
+  document.querySelectorAll('.empty-chart').forEach((el) => {{
+    el.textContent = 'Chart library failed to load (need network for Chart.js CDN).';
   }});
 }}
 </script>
