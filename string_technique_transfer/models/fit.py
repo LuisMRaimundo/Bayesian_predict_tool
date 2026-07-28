@@ -239,19 +239,30 @@ def _fit_m2(
                 }
             )
 
-    # Transport sd from corpus contrast; higher floor when most pairs are transport priors
+    # External transport-uncertainty proxy (NOT identified corpus variance).
+    # When corpus ≈ technique (typical Philharmonia folders), SD(corpus means)
+    # mixes technique differences with transport error — use only as a floor.
     if "ordinario_corpus_id" in df.columns and "special_corpus_id" in df.columns:
-        mismatch = (df["ordinario_corpus_id"].astype(str) != df["special_corpus_id"].astype(str)).mean()
+        mismatch = (
+            df["ordinario_corpus_id"].astype(str) != df["special_corpus_id"].astype(str)
+        ).mean()
     else:
         mismatch = float(df["is_transport_prior"].mean()) if "is_transport_prior" in df.columns else 0.0
-    if df["corpus_id"].nunique() > 1:
+    tech_confounded = (
+        "technique" in df.columns
+        and df.groupby("technique")["corpus_id"].nunique().max() <= 1
+        and df["corpus_id"].nunique() > 1
+    )
+    if tech_confounded or mismatch > 0.5:
+        transport_sd = 0.22  # external proxy floor for cross-corpus transport
+        transport_sd_source = "external_proxy_technique_corpus_confounded"
+    elif df["corpus_id"].nunique() > 1:
         transport_sd = float(df.groupby("corpus_id")["log_ratio"].mean().std(ddof=0))
+        transport_sd = max(transport_sd, 0.12)
+        transport_sd_source = "dispersion_of_corpus_means_proxy"
     else:
         transport_sd = 0.18
-    if mismatch > 0.5 or (
-        "is_transport_prior" in df.columns and float(df["is_transport_prior"].mean()) > 0.5
-    ):
-        transport_sd = max(transport_sd, 0.22)
+        transport_sd_source = "single_corpus_default_proxy"
     transport_sd = max(transport_sd, 0.12)
 
     return FitResult(
@@ -263,17 +274,23 @@ def _fit_m2(
         params={
             "models": models,
             "transport_sd": transport_sd,
+            "transport_sd_source": transport_sd_source,
             "midi_range": midi_range,
             "apply_acoustic_prior": apply_acoustic_prior,
             "interval_type": "heuristic_predictive",
         },
         diagnostics={
             "transport_sd": transport_sd,
+            "transport_sd_source": transport_sd_source,
             "techniques_fit": list(models),
             "policy": "winsor_responses+coefficient_acoustic_prior"
             if apply_acoustic_prior
             else "winsor_responses_only",
             "interval_type": "heuristic_predictive_not_bayesian_credible",
+            "note": (
+                "transport_sd is an external transport-uncertainty proxy, "
+                "not an empirically identified corpus variance when technique≡corpus."
+            ),
         },
     )
 

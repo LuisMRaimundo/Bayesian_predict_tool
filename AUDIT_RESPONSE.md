@@ -1,38 +1,53 @@
 # Audit response — scientific defects and corrections
 
-This document tracks the external audit verdict (ZIP ≡ GitHub `76b7cc4`) and the remediation status in this repository.
+This document tracks the external audit (ZIP ≡ `76b7cc4`) and the **re-audit** of commit `6f3c3dc` / follow-ups.
 
-## Verdict accepted
+## Classification (current)
 
-The tool remains useful for **exploratory** transfer analysis and Excel export. It is **not** publication-ready as a hierarchical Bayesian extrapolation of IOWA/ORCHIDEA until the defects below are closed and re-audited on real multi-corpus bridges.
+**An exploratory cross-corpus transfer tool with robust regression and Excel export — not a publication-grade hierarchical Bayesian extrapolation system.**
 
-## Defect → correction map
+Defensible for: exploratory technique-conditioned EWSD profiles under **explicit** cross-corpus transport assumptions.  
+Not defensible for: claiming how IOWA/ORCHIDEA would definitively have measured those techniques.
 
-| # | Audit finding | Status in code |
-|---|---|---|
-| 1 | Cross-collection pairs labelled `paired_same_collection` | **Fixed** — `bridge.py` enforces `require_same_collection` literally; cross-collection pairs only when allowed and labelled `transport_prior`; stores `special_corpus_id` + `ordinario_corpus_id` |
-| 2 | M3 Bambi formula not hierarchical | **Partially fixed** — adds `(1\|corpus_id)` only when ≥1 technique spans multiple corpora; otherwise documents confounding and raises transport_sd floor |
-| 3 | Observation SE unused in Bayes likelihood | **Partial** — SE retained; inverse-variance used in M2 WLS; full heteroskedastic Student-t still needs custom PyMC (documented, not silently claimed) |
-| 4 | Silent non-Bayesian M3 fallback | **Fixed** — `allow_m3_approx_fallback=False` by default; hard `RuntimeError` unless authorized; package versions recorded when Bayes runs |
-| 5 | Unspecified dynamics invented from ordinario | **Fixed** — `dynamic=unspecified`, `dynamic_support=unknown`; predictions → `extrapolated_dynamic` |
-| 6 | Response-level acoustic prior dominates | **Fixed** — no per-row shrink in bridge; coefficient-level shrink once with weaker `prior_strength=1`; sensitivity toggles model prior |
-| CV leakage | Winsorize before folds | **Fixed** — `blocked_cv` re-winsorizes inside each training fold |
-| Intervals | Named as if Bayesian | **Fixed** — `interval_type=heuristic_predictive…` columns/diagnostics |
-| Defaults | `require_same_collection=False` | **Fixed** — default `True` (GUI + config); CLI `--allow-cross-collection` to opt in |
+## Status of defects
 
-## What users should do now
+| Previous finding | Status |
+|---|---|
+| Cross-collection pairs labelled as same-collection | **Fixed** |
+| `require_same_collection=True` not enforced | **Fixed** |
+| Separate source and ordinario corpus IDs missing | **Fixed** |
+| Unknown dynamics assigned arbitrary ordinario dynamics | **Fixed** |
+| Acoustic prior applied to every observation | **Largely fixed** (coefficient-level once) |
+| Cross-validation winsorisation leakage | **Fixed** |
+| Non-Bayesian M3 fallback presented as Bayesian | **Fixed** (hard-fail unless authorized; `is_bayesian=False`) |
+| Corpus hierarchy in M3 | **Partial** — `(1\|corpus_id)` only if identifiable; absent when technique≡corpus |
+| EWSD observation SE in Bayesian likelihood | **Not fixed** (`weighted=False`; needs custom PyMC) |
+| Publication-grade M3 | **Not achieved** |
+| `transport_sd` as corpus variance | **Clarified** as external proxy when technique≡corpus |
+| CI / smoke failing under strict same-collection | **Fixed** (smoke + mode tests) |
 
-1. Prefer **same-collection bridges** (ordinario + technique from the same corpus folder).  
-2. Treat cross-collection runs as **transport priors** (uncertainty inflated).  
-3. Do **not** use M3 outputs unless Bayes extras install cleanly **and** the backend reports `bambi_pymc` with `is_bayesian=True`.  
-4. After unspecified-dynamic fix, re-run model comparison before trusting M1 vs M2 ranks.  
-5. Do **not** publish IOWA/ORCHIDEA extrapolations until a fresh audit confirms items 1–5 on your corpus.
+## Re-audit execution notes (user violin bridge)
+
+With corrected software on the Philharmonia-style bridge + IOWA/ORCHIDEA target:
+
+- Strict same-collection mode **correctly rejects** the bridge.
+- Cross-collection mode yields ~140 transport-prior log-ratios (100% transport).
+- Unspecified-dynamic techniques (artificial harmonics, sul tasto) are **dynamic extrapolations**.
+- Corrected blocked CV ≈ **18–20%** factor MAPE; M1 ranked best among M0–M2; M3 approx worst.
+
+Recommended workflow for this material:
+
+1. Enable cross-collection transport **explicitly**.  
+2. Primary model: **M1**; baseline **M0**; secondary **M2**.  
+3. Do **not** use M3 approximate.  
+4. Describe every result as a **model-derived transport estimate**.  
+5. Keep heuristic intervals; do **not** call them Bayesian credible intervals.
 
 ## Remaining scientific work
 
-- Custom PyMC likelihood \(r_i \sim t_\nu(\mu_i,\sqrt{\mathrm{SE}_i^2+\sigma^2})\).  
-- Replicated multi-corpus bridges before estimating technique×corpus random effects.  
-- Outer validation loop when auto model selection + conformal calibration are both on.  
-- Optional CI job that runs a minimal real M3 sample (heavy; gated).
+1. Same-collection / multi-session bridges so technique ≠ corpus.  
+2. Custom PyMC likelihood \(r_i\sim t_\nu(\mu_i,\sqrt{\mathrm{SE}_i^2+\sigma^2})\).  
+3. Outer validation when auto-selection + conformal calibration are both on.  
+4. Re-audit after those land before publication claims.
 
-See also: `LITERATURE_ALIGNMENT.md`, `TECHNICAL_MANUAL.md` §1.6, `requirements-bayes.txt`.
+See also: `LITERATURE_ALIGNMENT.md`, `requirements-bayes.txt`, `TECHNICAL_MANUAL.md`.

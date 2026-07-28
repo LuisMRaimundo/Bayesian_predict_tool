@@ -39,7 +39,7 @@ class STTApp(ttk.Frame):
         self.target_path = tk.StringVar()
         self.zenodo_collection = tk.StringVar(value="MEDIA")  # MEDIA / ORCH / IOWA / BOTH
         self.instrument = tk.StringVar(value="Violin")
-        self.model_id = tk.StringVar(value="M2_midi_gam")
+        self.model_id = tk.StringVar(value="M1_register_dynamic")
         self.metric = tk.StringVar(value="EWSD_score_acoustic_balanced")
         self.same_collection = tk.BooleanVar(value=True)
         self.allow_m3_approx = tk.BooleanVar(value=False)

@@ -40,7 +40,7 @@ python run_gui.py
 1. Add bridge files (ordinario + special techniques)  
 2. Choose Zenodo ordinario workbook + source (**`MEDIA`** default = `Violin_Media` columns **M/N/O** = Media pp/mf/**ff**; or `ORCH` / `IOWA`)  
 3. Click **Preflight** (history HTML lists every selected Excel; charts wait for Fit)  
-4. Keep **Strict dynamics** ON; model **M2**  
+4. Keep **Strict dynamics** ON; prefer model **M1** (exploratory default). For Philharmonia-style bridges with different folder collections, enable **cross-collection transport** (CLI `--allow-cross-collection`) — results are transport priors, not same-corpus pairs.  
 5. **Fit & predict** → use this triad (also highlighted yellow in the Excel `README` sheet):
 
    1. **File:** your output workbook (e.g. `outputs\transfer_audit.xlsx`)  
@@ -52,10 +52,12 @@ python run_gui.py
 ## CLI
 
 ```bat
-python -m string_technique_transfer.cli --bridge data\violin_bridge_panel.csv --target "C:\Users\lmr20\Desktop\VIOLIN_Zenodo_collections_Arco_normal.xlsx" --zenodo-collection MEDIA --model M2_midi_gam --out outputs\transfer_audit.xlsx
+python -m string_technique_transfer.cli --bridge data\violin_bridge_panel.csv --target "C:\Users\lmr20\Desktop\VIOLIN_Zenodo_collections_Arco_normal.xlsx" --zenodo-collection MEDIA --model M1_register_dynamic --allow-cross-collection --out outputs\transfer_audit.xlsx
 
 python -m string_technique_transfer.cli --bridge ... --target ... --preflight-only
 ```
+
+Cross-collection bridges require `--allow-cross-collection`. M3 hard-fails without a working Bayes stack unless `--allow-m3-approx` (still not Bayesian).
 
 ## Robustness features
 
@@ -79,7 +81,7 @@ pytest -q
 
 | ID | Use |
 |---|---|
-| `M2_midi_gam` | **Default / exploratory recommended** |
-| `M1_register_dynamic` | Register×dynamic cells (re-validate after dynamic-label fixes) |
-| `M0_global_factor` | Baseline sanity check |
-| `M3_hierarchical_bayes` | Only with pinned Bayes stack (`requirements-bayes.txt`); fails hard if unavailable |
+| `M1_register_dynamic` | **Default / primary exploratory** (best CV on corrected cross-corpus violin bridge) |
+| `M0_global_factor` | Sensitivity baseline |
+| `M2_midi_gam` | Secondary pitch-smoothing comparison |
+| `M3_hierarchical_bayes` | Only with pinned Bayes stack; **hard-fails** if unavailable (no silent fallback) |

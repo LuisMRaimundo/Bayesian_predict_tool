@@ -11,7 +11,8 @@ from .models.base import MODEL_CHOICES
 @dataclass
 class TransferConfig:
     metric: str = "EWSD_score_acoustic_balanced"
-    model_id: str = "M2_midi_gam"
+    # Re-audit on cross-corpus violin bridges: M1 currently best exploratory CV
+    model_id: str = "M1_register_dynamic"
     # Audit default: do not silently invent same-collection pairs
     require_same_collection: bool = True
     strict_dynamics: bool = True

@@ -49,13 +49,13 @@ Example: bridge sordina **forte** supports only Zenodo **ff**.
 
 1. Run **Preflight**. Prefer **same-collection** bridges (default); cross-collection pairs are `transport_prior` only if explicitly allowed.
 2. Keep **Strict dynamics** ON. Techniques with `dynamic=unspecified` are **not** treated as measured at pp/mf/ff.
-3. Prefer **M2** for exploratory work. Do **not** use M3 unless the Bayes stack is installed and the run reports `backend=bambi_pymc` (no silent approx).
+3. Prefer **M1** as primary exploratory model (re-audit CV); keep **M0** as baseline and **M2** as pitch-smoothing comparison. Do **not** use M3 approx; real M3 only if `backend=bambi_pymc` and `is_bayesian=True`.
 4. Publish/analyse only this triad (yellow-highlighted in the Excel workbook):
    1. **File** — your output `.xlsx`
    2. **Page** — **`Predictions_supported`**
    3. **Column** — **`y_pred`**
-5. Report transport-prior fraction and blocked-CV errors with any released table.
-6. Archive the run via `outputs/run_history/…/RUN_REPORT.html` (lists every uploaded Excel; charts fill after **Fit & predict**). See `INDEX.md` in that folder.
+5. Report transport-prior fraction and blocked-CV factor error (~18–20% on the corrected Philharmonia-style bridge) with any released table. Intervals are heuristic, not Bayesian credible intervals.
+6. Archive the run via `outputs/run_history/…/RUN_REPORT.html`. See `INDEX.md` and `AUDIT_RESPONSE.md`.
 
 ## Run history
 

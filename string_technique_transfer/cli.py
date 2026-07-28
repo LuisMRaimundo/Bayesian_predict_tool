@@ -81,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Zenodo source: MEDIA (Violin_Media!O/N/M) | ORCH | IOWA | BOTH",
     )
     p.add_argument("--instrument", default="Violin")
-    p.add_argument("--model", default="M2_midi_gam")
+    p.add_argument("--model", default="M1_register_dynamic")
     p.add_argument("--metric", default="EWSD_score_acoustic_balanced")
     p.add_argument(
         "--allow-cross-collection",

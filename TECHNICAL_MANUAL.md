@@ -13,11 +13,17 @@ stackedit: Open this file in https://stackedit.io (Markdown + KaTeX)
 **Local folder:** `C:\Users\lmr20\Desktop\Bayesian Tool`  
 **How to view equations:** open this file in [StackEdit](https://stackedit.io) (File → Open from disk). All mathematics uses standard LaTeX delimiters (`$$ … $$`, `$…$`).
 
+### v1.5 re-audit follow-up
+
+- Default exploratory model **M1**; smoke/CI cover same-collection vs transport modes.  
+- `transport_sd` labelled as external proxy when technique≡corpus.  
+- Docs aligned with hard-fail M3. See **`AUDIT_RESPONSE.md`** (re-audit section).
+
 ### v1.4 / v0.3 audit corrections (implemented)
 
 - Bridge: literal `require_same_collection`; dual corpus ids; unspecified dynamics kept; no response-level prior shrink.  
 - M3: no silent approx fallback; optional `(1|corpus_id)` when identifiable.  
-- CV: winsorize inside folds; intervals labelled heuristic. See **`AUDIT_RESPONSE.md`**.
+- CV: winsorize inside folds; intervals labelled heuristic.
 
 ### v1.3 upgrades (implemented)
 
