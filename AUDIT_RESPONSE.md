@@ -1,7 +1,7 @@
 # Audit response — scientific defects and corrections
 
 Tracks the external audit (`76b7cc4`), re-audit (`6f3c3dc` / `e13b2d4`), and the
-**scientific advance** commits (heteroscedastic PyMC + paired-corpus pathway).
+**scientific advance** at `1b01457`+ (heteroscedastic PyMC + paired-corpus pathway).
 
 ## Classification (current)
 

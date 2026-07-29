@@ -67,8 +67,9 @@ Cross-collection bridges require `--allow-cross-collection`. M3 hard-fails witho
 - **Same-collection** bridge pairing by default; cross-collection pairs labelled `transport_prior` only if allowed  
 - Unspecified technique dynamics kept as `unspecified` (not invented from ordinario)  
 - Winsorize responses; acoustic prior applied **once** at model coefficients (not per row)  
-- M0–M3 comparison, blocked CV (winsor inside folds), calibration, holdout, sensitivity  
-- M3: real Bambi/PyMC only; **no silent approx** unless `--allow-m3-approx` / GUI checkbox  
+- Model comparison defaults to **M0–M2**; blocked CV (winsor inside folds), calibration, holdout, sensitivity  
+- M3: **PyMC heteroscedastic** Student-t (`se_log_obs` in scale); Bambi only if PyMC fails; approx only if `--allow-m3-approx`  
+- Paired-corpus gates: see `PAIRED_CORPUS.md` (synthetic template under `data/`)  
 - Excel: `Predictions_supported!y_pred` + validation sheets; intervals are **heuristic predictive**  
 - Run history HTML under `outputs/run_history/` (uploaded Excel names + charts after Fit)
 

@@ -532,44 +532,37 @@ then clip. **Outside** MIDI range: use $\mu_t^{\mathrm{center}}$ only (no spline
 
 ---
 
-### 7.4 M3 — Hierarchical Bayes (optional)
+### 7.4 M3 — Heteroscedastic Bayes (optional)
 
-**Entry:** `_fit_m3` — **lines 239–266**
+**Entry:** `_fit_m3` → preferred `models/m3_pymc.fit_m3_heteroscedastic`
 
-#### Gate (thin design)
+#### Gates
 
-If $n<25$ or $\#\{\text{techniques}\}<2$: skip full Bayes → `_fit_m3_approx`.
+- No Bayes stack / sampling failure → hard error unless `allow_m3_approx_fallback`.  
+- `require_paired_corpus_for_m3=True` (default) → refuse **transport-only** bridges.  
+- Blocked CV / model comparison uses **approx only** (`m3_force_approx`) — no multi-fold MCMC.
 
-#### 7.4.1 Approximate hierarchy (no PyMC)
+#### 7.4.1 Preferred: PyMC heteroscedastic Student-$t$
 
-**Function:** `_fit_m3_approx` — **lines 269–292**
-
-1. Fit M2 surface (used for $\widehat Y$).  
-2. Compute corpus-level means and a diagnostic pooled mean:
+**Module:** `models/m3_pymc.py` · backend `pymc_heteroscedastic_student_t`
 
 $$
-\tau=\max\!\big(\mathrm{sd}_k(\bar\delta_k),0.08\big),
+r_i \sim t_{\nu}\!\left(\mu_i,\;\sqrt{\mathrm{SE}_{\log,i}^{2}+\sigma^{2}}\right),
 \qquad
-\bar\delta_k^{\mathrm{pool}}
-=
-\frac{n_k\,\bar\delta_k + \tau^{-2}\,\bar\delta}{n_k+\tau^{-2}}.
+\mu_i=\alpha_{t_i}+\beta_{t_i}\,m_i^{\mathrm{z}}+\gamma_{d_i}\,(+\ u_{c_i}\text{ if identifiable}).
 $$
 
-> **Audit note:** $\bar\delta_k^{\mathrm{pool}}$ is stored in `params['corpus_effects']` for audit; **point prediction currently uses the attached M2 surface**, not a second corpus correction. This is intentional for numerical stability.
+$\mathrm{SE}_{\log,i}$ comes from EWSD CIs (`se_log_obs`). Corpus random effect $u_c$ is added **only** if ≥1 technique spans ≥2 corpora.
 
-#### 7.4.2 Full Bambi / PyMC
+Point predict: posterior technique surface (`pymc_posterior_mean`); `observation_se_in_likelihood=True`.
 
-**Function:** `_fit_m3_bambi` — **lines 295–373**
+#### 7.4.2 Secondary: Bambi (homoscedastic)
 
-Student-$t$ family; adaptive formula:
+**Function:** `_fit_m3_bambi` — used only if PyMC fails. Stock Bambi Student-$t$ does **not** put `se_log_obs` in the likelihood.
 
-| Design size | Formula (conceptual) |
-|---|---|
-| tiny | $\delta\sim 1$ or $1+C(d)$ or $0+\mathrm{tech}+C(d)$ |
-| medium | $0+\mathrm{tech}+\mathrm{tech}{:}\mathrm{bs}(m,3)+C(d)$ |
-| large | $0+\mathrm{tech}+\mathrm{tech}{:}\mathrm{bs}(m,4)+\mathrm{tech}{:}C(d)$ |
+#### 7.4.3 Approximate hierarchy (authorized only)
 
-**Consistency fix (v1.1):** after sampling, the fit **attaches M2 `models`** for `y_pred`. Posterior `idata` remains for diagnostics. Point predict path is therefore mathematically the M2 surface under an M3 audit wrapper.
+**Function:** `_fit_m3_approx` — M2 + technique-center pooling; `is_bayesian=False`. Not for final tables.
 
 ---
 
@@ -652,31 +645,22 @@ $$
 | Topic | File | Lines | Formula / algorithm |
 |---|---|---|---|
 | Pipeline orchestration | `pipeline.py` | `run_transfer` | §3 flowchart |
-| Log-ratio bridge | `bridge.py` | 19–161 | $\delta=\log(Y_t/Y_{\mathrm{ord}})$; winsor; shrink |
-| CI → log SE | `bridge.py` | 13–16 | $(\log hi-\log lo)/(2\cdot 1.96)$ |
-| Factor summary | `bridge.py` | 164–176 | median / IQR of $e^{\delta}$ |
-| Priors table | `acoustics.py` | 9–45 | $f^{\mathrm{prior}},[f_{\lo},f_{\mathrm{hi}}],\kappa$ |
-| Shrink | `acoustics.py` | 48–54 | $(n\delta+\kappa\delta_0)/(n+\kappa)$ |
-| Clip | `acoustics.py` | 57–66 | clip to $\log$ bounds |
-| Huber weights | `acoustics.py` | 69–81 | §5.4 |
-| Dynamic adequacy | `dynamics.py` | 60–71 | Zenodo map §6.2 |
-| Zenodo→bridge map | `dynamics.py` | 100–114 | preferred partner order |
-| Register bins | `models/fit.py` | 26–36 | §7 |
-| Dispatcher | `models/fit.py` | 39–56 | M0–M3 switch |
-| M0 | `models/fit.py` | 59–73 | technique mean |
-| M1 | `models/fit.py` | 76–112 | cell + pool $n_0=4$ |
-| M2 | `models/fit.py` | 115–236 | constant / WLS B-spline |
-| M3 gate | `models/fit.py` | 239–266 | thin-design skip |
-| M3 approx | `models/fit.py` | 269–292 | M2 + corpus audit pool |
-| M3 Bambi | `models/fit.py` | 295–373 | Student-$t$ GAM + attach M2 |
-| Effect lookup | `models/fit.py` | 376–456 | $\widehat\delta(m,d)$ |
-| Predict | `models/fit.py` | 459–581 | $Y e^{\delta}$, intervals |
-| Blocked CV | `validation/blocked_cv.py` | 30–120 | §9 |
-| MEDIA loader (col O) | `io/loaders.py` | `load_zenodo_media_ordinario` | Media pp/mf/ff |
-| Excel highlight triad | `export/excel_audit.py` | `PRIMARY_SHEET/COLUMN` | file / page / `y_pred` |
-| Run history folder + index | `run_history.py` | `start_run` / `finalize_run` | §1.6 |
-| Illustrated HTML report | `run_report_html.py` | `write_html_report` | charts + uploaded Excel names |
-| Model IDs | `models/base.py` | 8–13 | `MODEL_CHOICES` |
+| Log-ratio bridge | `bridge.py` | `build_log_ratios` | $\delta=\log(Y_t/Y_{\mathrm{ord}})$; winsor only |
+| CI → log SE | `bridge.py` | `_log_se_from_ci` | $(\log hi-\log lo)/(2\cdot 1.96)$ |
+| Paired-corpus tier | `paired_corpus.py` | `assess_paired_corpus` | paired / mixed / transport_only |
+| Priors table | `acoustics.py` | `TECHNIQUE_PRIOR` | coefficient-level $\kappa=1$ |
+| Shrink (model-level) | `acoustics.py` | `shrink_log_ratio` | $(n\delta+\kappa\delta_0)/(n+\kappa)$ |
+| Dispatcher | `models/fit.py` | `fit_model` | M0–M3 |
+| M0 / M1 / M2 | `models/fit.py` | `_fit_m0/_m1/_m2` | §7.1–7.3 |
+| M3 PyMC heteroscedastic | `models/m3_pymc.py` | `fit_m3_heteroscedastic` | §7.4.1 |
+| M3 Bambi fallback | `models/fit.py` | `_fit_m3_bambi` | homoscedastic |
+| M3 approx (opt-in) | `models/fit.py` | `_fit_m3_approx` | not Bayesian |
+| Predict | `models/fit.py` | `predict_transfer` | $Y e^{\delta}$, heuristic intervals |
+| Blocked CV | `validation/blocked_cv.py` | fold-internal winsor; M3≈approx | §9 |
+| Model compare | `validation/compare.py` | default M0–M2 | exploratory rank |
+| MEDIA loader | `io/loaders.py` | `load_zenodo_media_ordinario` | Media pp/mf/ff |
+| Excel triad | `export/excel_audit.py` | `Predictions_supported!y_pred` | canonical use |
+| Run history | `run_history.py` / `run_report_html.py` | HTML+MD+JSON | §1.6 |
 
 ---
 
@@ -700,16 +684,13 @@ Performed against the implementation in this repository (manual v1.1).
 
 ### 11.2 Design choices / limitations (documented, not bugs)
 
-1. **M3 corpus pooled means** are audit statistics; prediction uses M2 surface.  
-2. **Full Bambi M3** stores posterior for diagnostics; **point `y_pred` uses attached M2 models** (stability on Windows / thin designs).  
-3. **M1 SE formula** is a heuristic precision weight, not a full Bayesian posterior SD.  
-4. **Per-row acoustic shrink is removed** from the bridge; coefficient-level shrink (if enabled) uses $n_{\mathrm{eff}}=n_t$.  
-5. Predictions remain **model-derived synthetics**, even when `supported`.
-
-### 11.3 Fix included in v1.1
-
-Previously, a successful Bambi fit did **not** attach a `models` dict, so `_effect_from_fit` could return `unsupported_technique` / zero effect.  
-**Fix:** `_fit_m3_bambi` now attaches the M2 prediction surface (`params['models']`) while keeping `idata`.
+1. **Preferred M3** is PyMC heteroscedastic Student-$t$ with `se_log_obs` in the scale.  
+2. **Bambi M3** is secondary (homoscedastic) if PyMC fails.  
+3. **M3 approx** is opt-in only (`is_bayesian=False`); used inside CV folds for speed.  
+4. **Corpus random effects** only when technique spans ≥2 corpora; otherwise confounded.  
+5. **Per-row acoustic shrink** removed; coefficient-level shrink optional.  
+6. Predictions remain **model-derived synthetics**, even when `supported`.  
+7. **Scientific 95–100** needs a genuine paired corpus (`PAIRED_CORPUS.md`) — code cannot invent it.
 
 ---
 
