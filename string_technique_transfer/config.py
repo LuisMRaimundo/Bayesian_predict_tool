@@ -27,6 +27,8 @@ class TransferConfig:
     apply_acoustic_prior: bool = True
     # When False, explicit M3 requests fail instead of silent hierarchical_approx_*
     allow_m3_approx_fallback: bool = False
+    # When True, M3 refuses transport-only bridges (no same-collection pairs)
+    require_paired_corpus_for_m3: bool = True
     cv_block_semitones: int = 12
     min_bridge_pairs: int = 8
     min_supported_predictions: int = 1

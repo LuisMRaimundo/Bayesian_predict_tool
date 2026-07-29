@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "string-technique-transfer"
-version = "0.3.1"
+version = "0.4.0"
 description = "Instrument-agnostic technique-transfer for string spectral metrics (exploratory; see AUDIT_RESPONSE.md)."
 readme = "README.md"
 requires-python = ">=3.10"

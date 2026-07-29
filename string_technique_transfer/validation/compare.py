@@ -8,6 +8,13 @@ import pandas as pd
 from ..models.base import MODEL_CHOICES
 from .blocked_cv import blocked_pitch_cv
 
+# Default compare excludes full MCMC M3; include approx M3 only when requested
+_DEFAULT_COMPARE = (
+    "M0_global_factor",
+    "M1_register_dynamic",
+    "M2_midi_gam",
+)
+
 
 def compare_models(
     bridge: pd.DataFrame,
@@ -15,9 +22,12 @@ def compare_models(
     metric: str = "EWSD_score_acoustic_balanced",
     model_ids: tuple[str, ...] | None = None,
     block_semitones: int = 12,
+    include_m3_approx: bool = False,
 ) -> pd.DataFrame:
     """Return one row per model with CV metrics + rank/recommendation flags."""
-    ids = list(model_ids or MODEL_CHOICES)
+    ids = list(model_ids or _DEFAULT_COMPARE)
+    if include_m3_approx and "M3_hierarchical_bayes" not in ids:
+        ids.append("M3_hierarchical_bayes")
     rows = []
     for mid in ids:
         tab = blocked_pitch_cv(
@@ -54,11 +64,11 @@ def compare_models(
                 best = "M2_midi_gam"
         out["recommended"] = out["model_id"].eq(best)
     else:
-        out["recommended"] = out["model_id"].eq("M2_midi_gam")
+        out["recommended"] = out["model_id"].eq("M1_register_dynamic")
     return out
 
 
-def recommended_model_id(comparison: pd.DataFrame, default: str = "M2_midi_gam") -> str:
+def recommended_model_id(comparison: pd.DataFrame, default: str = "M1_register_dynamic") -> str:
     if comparison is None or len(comparison) == 0:
         return default
     if "recommended" in comparison.columns and comparison["recommended"].any():

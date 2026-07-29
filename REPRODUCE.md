@@ -21,8 +21,16 @@ M3 fails unless this stack imports cleanly, unless you explicitly pass `--allow-
 
 ```bat
 python examples\smoke_transfer.py
-pytest -q
+pytest -q -m "not slow"
 ```
+
+Optional PyMC heteroscedastic M3 smoke (needs `requirements-bayes.txt`):
+
+```bat
+pytest -q -m slow
+```
+
+Paired-corpus template (synthetic only): `data\paired_corpus_synthetic.csv` — see `PAIRED_CORPUS.md`.
 
 ## 3. Violin Media-ff transfer (your Zenodo workbook)
 

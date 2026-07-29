@@ -13,11 +13,17 @@ stackedit: Open this file in https://stackedit.io (Markdown + KaTeX)
 **Local folder:** `C:\Users\lmr20\Desktop\Bayesian Tool`  
 **How to view equations:** open this file in [StackEdit](https://stackedit.io) (File → Open from disk). All mathematics uses standard LaTeX delimiters (`$$ … $$`, `$…$`).
 
+### v1.6 / v0.4 scientific advance
+
+- **PyMC heteroscedastic M3:** \(r_i\sim t_\nu(\mu_i,\sqrt{\mathrm{SE}_i^2+\sigma^2})\) in `models/m3_pymc.py`.  
+- **Paired-corpus pathway:** `paired_corpus.py`, `PAIRED_CORPUS.md`, M3 refuses transport-only by default.  
+- Engineering closed; scientific validation still needs real paired recordings.
+
 ### v1.5 re-audit follow-up
 
 - Default exploratory model **M1**; smoke/CI cover same-collection vs transport modes.  
 - `transport_sd` labelled as external proxy when technique≡corpus.  
-- Docs aligned with hard-fail M3. See **`AUDIT_RESPONSE.md`** (re-audit section).
+- Docs aligned with hard-fail M3. See **`AUDIT_RESPONSE.md`**.
 
 ### v1.4 / v0.3 audit corrections (implemented)
 

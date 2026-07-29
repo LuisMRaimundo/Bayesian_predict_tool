@@ -23,7 +23,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[bayes]" || pip install -e .
           pip install pytest
-      - name: Pytest
-        run: pytest -q
+      - name: Pytest (core)
+        run: pytest -q -m "not slow"
+      - name: Pytest slow PyMC (when bayes extras installed)
+        run: pytest -q -m slow
+        continue-on-error: true
       - name: Smoke CLI (synthetic)
         run: python examples/smoke_transfer.py

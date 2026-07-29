@@ -142,13 +142,29 @@ def run_transfer(
         if calib is not None:
             log_operation(record, "calibration", calib.to_dict())
 
+        from .paired_corpus import assess_paired_corpus
+
+        paired = assess_paired_corpus(bridge)
+        log_operation(
+            record,
+            "paired_corpus_assessment",
+            {
+                "tier": paired.scientific_tier,
+                "paired_fraction": paired.paired_fraction,
+                "n_same_collection": paired.n_same_collection,
+                "n_transport_prior": paired.n_transport_prior,
+            },
+        )
         fit = fit_model(
             bridge,
             model_id=cfg.model_id,
             metric=cfg.metric,
             apply_acoustic_prior=cfg.apply_acoustic_prior,
             allow_m3_approx_fallback=cfg.allow_m3_approx_fallback,
+            require_paired_corpus_for_m3=cfg.require_paired_corpus_for_m3,
         )
+        fit.diagnostics["paired_corpus_tier"] = paired.scientific_tier
+        fit.diagnostics["paired_fraction"] = paired.paired_fraction
         log_operation(
             record,
             "fit_model",

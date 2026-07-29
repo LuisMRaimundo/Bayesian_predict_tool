@@ -119,6 +119,9 @@ def blocked_pitch_cv(
                 metric=metric,
                 apply_acoustic_prior=apply_acoustic_prior,
                 allow_m3_approx_fallback=allow_m3_approx_fallback,
+                # Never run multi-fold MCMC inside CV — approx only for M3 slot
+                m3_force_approx=(model_id == "M3_hierarchical_bayes"),
+                require_paired_corpus_for_m3=False,
             )
         except Exception:
             continue

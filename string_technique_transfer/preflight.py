@@ -123,7 +123,20 @@ def preflight_transfer(
                 + ", ".join(unused)
             )
 
-    if summary.get("transport_prior_fraction", 0) > 0.5:
+    from .paired_corpus import assess_paired_corpus
+
+    paired = assess_paired_corpus(bridge)
+    summary["paired_corpus_tier"] = paired.scientific_tier
+    summary["paired_fraction"] = paired.paired_fraction
+    summary["n_same_collection_pairs"] = paired.n_same_collection
+    if paired.scientific_tier == "transport_only":
+        warnings.append(paired.message)
+        if cfg.model_id == "M3_hierarchical_bayes" and cfg.require_paired_corpus_for_m3:
+            errors.append(
+                "M3 requires paired (same-collection) bridge rows; "
+                "current bridge is transport-only. Collect a paired corpus or use M1/M2."
+            )
+    elif summary.get("transport_prior_fraction", 0) > 0.5:
         warnings.append(
             "Most bridge pairs are cross-collection transport priors; "
             "do not interpret effects as causal technique-only differences."

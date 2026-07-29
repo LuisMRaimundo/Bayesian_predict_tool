@@ -5,11 +5,13 @@ Local research tool for **instrument-agnostic** technique transfer of spectral-d
 **Repository:** https://github.com/LuisMRaimundo/Bayesian_predict_tool  
 **Local folder:** `C:\Users\lmr20\Desktop\Bayesian Tool`
 
-**Scientific status:** exploratory transfer / Excel export tool. Not publication-grade hierarchical Bayes until the items in **[AUDIT_RESPONSE.md](AUDIT_RESPONSE.md)** are closed on your corpus. Default bridge policy is **same-collection**; M3 does **not** silently fall back to a non-Bayesian approx.
+**Scientific status:** engineering audit **closed**; exploratory **M1** workflow **operational**; scientific validation **open** until a genuine paired corpus exists ([PAIRED_CORPUS.md](PAIRED_CORPUS.md), [AUDIT_RESPONSE.md](AUDIT_RESPONSE.md)).
 
-See [METHODOLOGY.md](METHODOLOGY.md) for the scientific protocol.  
-Full math / algorithms / code-line map + tutorial: **[TECHNICAL_MANUAL.md](TECHNICAL_MANUAL.md)** (open in [StackEdit](https://stackedit.io); LaTeX twin in `docs/TECHNICAL_MANUAL.tex`).  
-Reproduce: [REPRODUCE.md](REPRODUCE.md) · Literature priors: [LITERATURE_ALIGNMENT.md](LITERATURE_ALIGNMENT.md) · Bayes pins: [requirements-bayes.txt](requirements-bayes.txt)
+- Default: same-collection pairing; M1 model; heuristic intervals  
+- M3: PyMC heteroscedastic Student-t (**uses `se_log_obs`**); hard-fails without Bayes stack; refuses transport-only bridges by default  
+- Cross-folder Philharmonia bridges: `--allow-cross-collection` → all `transport_prior`
+
+See [METHODOLOGY.md](METHODOLOGY.md) · [TECHNICAL_MANUAL.md](TECHNICAL_MANUAL.md) · [REPRODUCE.md](REPRODUCE.md) · [LITERATURE_ALIGNMENT.md](LITERATURE_ALIGNMENT.md) · [requirements-bayes.txt](requirements-bayes.txt)
 
 ## Run history (per run)
 
@@ -84,4 +86,4 @@ pytest -q
 | `M1_register_dynamic` | **Default / primary exploratory** (best CV on corrected cross-corpus violin bridge) |
 | `M0_global_factor` | Sensitivity baseline |
 | `M2_midi_gam` | Secondary pitch-smoothing comparison |
-| `M3_hierarchical_bayes` | Only with pinned Bayes stack; **hard-fails** if unavailable (no silent fallback) |
+| `M3_hierarchical_bayes` | PyMC heteroscedastic Student-t (`√(SE²+σ²)`); needs paired rows by default; hard-fails if Bayes missing |

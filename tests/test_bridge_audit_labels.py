@@ -73,7 +73,7 @@ def test_response_level_prior_not_applied_in_bridge():
     assert np.allclose(br["log_ratio"], br["log_ratio_raw"])
 
 
-def test_m3_hard_fails_without_bayes_unless_authorized():
+def test_m3_hard_fails_without_bayes_unless_authorized(monkeypatch):
     rows = []
     for tech, coll, ord_flag, scale in (
         ("ordinario", "A", True, 1.0),
@@ -86,16 +86,28 @@ def test_m3_hard_fails_without_bayes_unless_authorized():
             )
     panel = pd.DataFrame(rows)
     br = build_log_ratios(panel, require_same_collection=True)
-    # Force approx path via thin? n is large enough — force no bayes by mocking
+
+    import string_technique_transfer.models.m3_pymc as m3_pymc
     from string_technique_transfer.models import fit as fit_mod
 
-    orig = fit_mod._bayes_stack
-    fit_mod._bayes_stack = lambda: (None, None)
-    try:
-        with pytest.raises(RuntimeError, match="M3 hierarchical Bayes"):
-            fit_model(br, model_id="M3_hierarchical_bayes", allow_m3_approx_fallback=False)
-        approx = fit_model(br, model_id="M3_hierarchical_bayes", allow_m3_approx_fallback=True)
-        assert "approx" in approx.backend
-        assert approx.diagnostics.get("is_bayesian") is False
-    finally:
-        fit_mod._bayes_stack = orig
+    def _boom(*_a, **_k):
+        raise ImportError("pymc unavailable in test")
+
+    monkeypatch.setattr(m3_pymc, "fit_m3_heteroscedastic", _boom)
+    monkeypatch.setattr(fit_mod, "_bayes_stack", lambda: (None, None))
+
+    with pytest.raises(RuntimeError, match="M3 hierarchical Bayes"):
+        fit_model(
+            br,
+            model_id="M3_hierarchical_bayes",
+            allow_m3_approx_fallback=False,
+            require_paired_corpus_for_m3=False,
+        )
+    approx = fit_model(
+        br,
+        model_id="M3_hierarchical_bayes",
+        allow_m3_approx_fallback=True,
+        require_paired_corpus_for_m3=False,
+    )
+    assert "approx" in approx.backend
+    assert approx.diagnostics.get("is_bayesian") is False

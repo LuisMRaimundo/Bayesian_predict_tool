@@ -43,6 +43,8 @@ def fit_model(
     *,
     apply_acoustic_prior: bool = True,
     allow_m3_approx_fallback: bool = False,
+    require_paired_corpus_for_m3: bool = False,
+    m3_force_approx: bool = False,
 ) -> FitResult:
     if model_id not in MODEL_CHOICES:
         raise ValueError(f"Unknown model_id {model_id}. Choose from {MODEL_CHOICES}")
@@ -68,6 +70,8 @@ def fit_model(
         metric,
         apply_acoustic_prior=apply_acoustic_prior,
         allow_m3_approx_fallback=allow_m3_approx_fallback,
+        require_paired_corpus=require_paired_corpus_for_m3,
+        force_approx=m3_force_approx,
     )
 
 
@@ -301,19 +305,23 @@ def _fit_m3(
     *,
     apply_acoustic_prior: bool = True,
     allow_m3_approx_fallback: bool = False,
+    require_paired_corpus: bool = False,
+    force_approx: bool = False,
 ) -> FitResult:
-    """Fit M3. Requires a working Bambi/PyMC stack unless approx fallback is authorized."""
+    """Fit M3 via heteroscedastic PyMC Student-t (preferred) or authorized approx."""
+    from ..paired_corpus import assess_paired_corpus
+
     n = len(df)
     n_tech = int(df["technique"].nunique())
     n_dyn = int(df["dynamic"].nunique())
+    paired = assess_paired_corpus(df)
 
     def _approx_or_raise(reason: str, backend: str) -> FitResult:
         if not allow_m3_approx_fallback:
             raise RuntimeError(
                 "M3 hierarchical Bayes was requested but could not run a real Bayesian fit.\n"
                 f"Reason: {reason}\n"
-                "Install compatible Bayes extras (`pip install -e \".[bayes]\"` with pinned "
-                "pymc/bambi/arviz from requirements-bayes.txt), or pass "
+                "Install compatible Bayes extras (`pip install -r requirements-bayes.txt`), or pass "
                 "allow_m3_approx_fallback=True to authorize the non-Bayesian approximation "
                 "(not equivalent to hierarchical Bayes; not publication-grade)."
             )
@@ -323,27 +331,79 @@ def _fit_m3(
             "AUTHORIZED non-Bayesian hierarchical approximation — not posterior sampling. "
             f"Reason: {reason}"
         )
+        approx.diagnostics["paired_corpus_tier"] = paired.scientific_tier
         approx.backend = backend
         return approx
 
-    if n < 25 or n_tech < 2:
+    if require_paired_corpus and paired.scientific_tier == "transport_only":
+        raise RuntimeError(
+            "M3 scientific mode requires at least some same-collection (paired) bridge rows.\n"
+            f"{paired.message}\n"
+            "Collect ordinario + special technique under the same recording chain, or "
+            "disable require_paired_corpus_for_m3 for exploratory transport-only runs."
+        )
+
+    # CV / model-comparison: use authorized approx only (avoid multi-fold MCMC)
+    if force_approx:
+        return _approx_or_raise(
+            "force_approx=True (blocked CV / model comparison path)",
+            "hierarchical_approx_cv_path",
+        )
+
+    if n < 12 or n_tech < 1:
         return _approx_or_raise(
             f"design too thin for full Bayes (n={n}, n_technique={n_tech}, n_dynamic={n_dyn})",
             "hierarchical_approx_thin_design",
         )
 
-    bmb, az = _bayes_stack()
-    if bmb is None or az is None:
-        return _approx_or_raise(
-            "Bambi/ArviZ import failed (missing or incompatible Bayes stack)",
-            "hierarchical_approx_no_pymc",
-        )
+    # Preferred path: custom PyMC heteroscedastic Student-t (uses se_log_obs)
     try:
-        return _fit_m3_bambi(
-            df, metric, bmb=bmb, az=az, apply_acoustic_prior=apply_acoustic_prior
+        from .m3_pymc import fit_m3_heteroscedastic
+
+        result = fit_m3_heteroscedastic(
+            df,
+            metric,
+            apply_acoustic_prior=apply_acoustic_prior,
+            m2_fallback_fitter=_fit_m2,
+            draws=300 if n < 40 else 400,
+            tune=300 if n < 40 else 400,
+            chains=2,
         )
+        result.diagnostics["paired_corpus_tier"] = paired.scientific_tier
+        result.diagnostics["paired_fraction"] = paired.paired_fraction
+        if paired.scientific_tier == "transport_only":
+            result.diagnostics["scientific_caveat"] = paired.message
+        return result
+    except ImportError as exc:
+        pymc_err = str(exc)
     except Exception as exc:  # noqa: BLE001
-        return _approx_or_raise(str(exc), "hierarchical_approx_after_bayes_fail")
+        pymc_err = str(exc)
+
+    # Legacy Bambi path (homoscedastic; SE not in likelihood) — only if PyMC failed
+    bmb, az = _bayes_stack()
+    if bmb is not None and az is not None:
+        try:
+            result = _fit_m3_bambi(
+                df, metric, bmb=bmb, az=az, apply_acoustic_prior=apply_acoustic_prior
+            )
+            result.diagnostics["pymc_heteroscedastic_error"] = pymc_err
+            result.diagnostics["note"] = (
+                (result.diagnostics.get("note") or "")
+                + " | Fell back to Bambi (homoscedastic; SE not in likelihood) after PyMC error: "
+                + pymc_err
+            )
+            result.diagnostics["paired_corpus_tier"] = paired.scientific_tier
+            return result
+        except Exception as exc:  # noqa: BLE001
+            return _approx_or_raise(
+                f"PyMC failed ({pymc_err}); Bambi failed ({exc})",
+                "hierarchical_approx_after_bayes_fail",
+            )
+
+    return _approx_or_raise(
+        f"PyMC heteroscedastic fit unavailable: {pymc_err}",
+        "hierarchical_approx_no_pymc",
+    )
 
 
 def _fit_m3_approx(
@@ -662,7 +722,15 @@ def _effect_from_fit(fit: FitResult, technique: str, dynamic: str, midi: float) 
         delta, _ = clip_log_effect(float(rows.iloc[0]["log_effect"]), technique)
         return delta, float(rows.iloc[0]["se"]), flag
 
-    # M3 full Bayes: try posterior mean before M2 fallback surface
+    # M3 PyMC heteroscedastic posterior surface
+    if fit.backend == "pymc_heteroscedastic_student_t":
+        from .m3_pymc import predict_pymc_effect
+
+        bayes = predict_pymc_effect(fit, technique, dynamic, midi)
+        if bayes is not None:
+            return bayes
+
+    # M3 Bambi: try posterior mean before M2 fallback surface
     if (
         fit.backend == "bambi_pymc"
         and fit.params.get("point_predict") == "bambi_posterior"
@@ -684,11 +752,24 @@ def _effect_from_fit(fit: FitResult, technique: str, dynamic: str, midi: float) 
         in_range = float(midi_min) <= float(midi) <= float(midi_max)
 
     if m.get("type") == "constant":
+        # PyMC constants may include MIDI slope
+        if m.get("pymc_heteroscedastic"):
+            from .m3_pymc import predict_pymc_effect
+
+            bayes = predict_pymc_effect(fit, technique, dynamic, midi)
+            if bayes is not None:
+                return bayes
         delta, _ = clip_log_effect(float(m["mu"]), technique)
         se = float(np.sqrt(m["se"] ** 2 + transport**2))
-        flag = "robust_constant" if in_range else "register_extrapolation"
+        flag = (
+            "pymc_posterior_mean"
+            if m.get("pymc_heteroscedastic")
+            else ("robust_constant" if in_range else "register_extrapolation")
+        )
         if not in_range:
             se = float(np.sqrt(se**2 + 0.15**2))
+            if not m.get("pymc_heteroscedastic"):
+                flag = "register_extrapolation"
         return delta, se, flag
 
     if m.get("type") == "gam":
@@ -778,6 +859,7 @@ def predict_transfer(
         "dynamic_only",
         "technique_pooled",
         "bambi_posterior_mean",
+        "pymc_posterior_mean",
     }
 
     rows = []
