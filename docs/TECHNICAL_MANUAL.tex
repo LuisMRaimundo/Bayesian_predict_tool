@@ -58,8 +58,14 @@ Same-collection enforced by default; dual corpus IDs stored.
 \]
 \subsection{M2 (secondary)} Robust constant or WLS B-spline on MIDI
 (\texttt{\_fit\_m2}). No spline extrapolation outside bridge MIDI.
-\subsection{M3} Bambi/PyMC when installed; hard fail unless approx fallback authorized.
-Optional \texttt{(1|corpus\_id)} only if a technique spans multiple corpora.
+\subsection{M3} Preferred: PyMC heteroscedastic Student-$t$
+\[
+r_i\sim t_\nu\!\bigl(\mu_i,\sqrt{\mathrm{SE}_i^2+\sigma^2}\bigr)
+\]
+(\texttt{models/m3\_pymc.py}; uses \texttt{se\_log\_obs}).
+Hard fail without Bayes stack unless approx authorized.
+Corpus group effect only if identifiable; refuses transport-only by default.
+Bambi homoscedastic path is secondary fallback only.
 
 \section{Uncertainty}
 \[
