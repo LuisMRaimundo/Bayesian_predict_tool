@@ -50,7 +50,9 @@ def _apply_path_inference(std: pd.DataFrame, path: Path) -> pd.DataFrame:
     # when technique is unknown OR still carries a raw stem-like label.
     tech_now = std["technique"].astype(str)
     needs_tech = tech_now.isin(["unknown", "nan"]) | tech_now.str.contains(
-        r"arco_normal|sordina|ponticello|tasto|harmonic", case=False, na=True
+        r"arco_normal|arco_ordinario|ordinario|sordina|ponticello|tasto|harmonic|orch_",
+        case=False,
+        na=True,
     )
     if needs_tech.all() or (std["technique"] == "unknown").all():
         std["technique"] = meta["technique"]

@@ -196,9 +196,15 @@ def normalize_technique(x) -> str:
         if c in aliases:
             return aliases[c]
         # substring / startswith helpers for folder-derived labels
-        if c.startswith("arco_normal") or c.startswith("arco_normale"):
-            return "ordinario"
-        if c.startswith("sordina") or c.startswith("sordino") or "con_sord" in c:
+        # Mute / special first (names may also contain the word "ordinario")
+        if (
+            c.startswith("sordina")
+            or c.startswith("sordino")
+            or "con_sord" in c
+            or "_sordina_" in f"_{c}_"
+            or c.endswith("_sordina")
+            or "sordina_" in c
+        ):
             return "con_sordino"
         if "ponticello" in c:
             return "sul_ponticello"
@@ -208,6 +214,18 @@ def normalize_technique(x) -> str:
             return "artificial_harmonics"
         if "naturais" in c or "natural_harmonic" in c or c.startswith("harmonics_natural"):
             return "natural_harmonics"
+        # Ordinario / arco normal — including Orchidea stems like ORCH_ff_Arco_ordinario
+        if (
+            c.startswith("arco_normal")
+            or c.startswith("arco_normale")
+            or c == "ordinario"
+            or c.endswith("_ordinario")
+            or "_ordinario_" in f"_{c}_"
+            or "arco_ordinario" in c
+            or c.endswith("arco_normal")
+            or "arco_normal_" in c
+        ):
+            return "ordinario"
     return core
 
 

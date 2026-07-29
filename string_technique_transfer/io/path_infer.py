@@ -16,7 +16,15 @@ def infer_from_path(path: str | Path) -> dict:
 
     # folder-based technique overrides / reinforcement
     joined = "/".join(parts_l)
-    if "con-sord" in joined or "con_sord" in joined or "sordina" in stem.lower():
+    stem_l = stem.lower().replace(" ", "_").replace("-", "_")
+    sordina_hint = (
+        "con-sord" in joined
+        or "con_sord" in joined
+        or "sordina" in stem_l
+        or "violin+sordina" in joined
+        or "+sordina" in joined
+    )
+    if sordina_hint:
         technique = "con_sordino"
         if dynamic == "unspecified":
             _, dynamic = parse_condition_label(stem)
@@ -38,7 +46,15 @@ def infer_from_path(path: str | Path) -> dict:
             _, dyn2 = parse_condition_label(stem)
             if dyn2 != "unspecified":
                 dynamic = dyn2
-    elif any(p.startswith("arco_normal") or p.startswith("arco_normale") for p in [stem.lower()] + parts_l):
+    elif any(
+        p.startswith("arco_normal")
+        or p.startswith("arco_normale")
+        or p == "ordinario"
+        or "arco_ordinario" in p
+        or p.endswith("_ordinario")
+        for p in [stem_l] + parts_l
+    ):
+        # Orchidea: .../Violin/ordinario/ORCH_arco_Vln_ff/.../ORCH_ff_Arco ordinario.xlsx
         technique = "ordinario"
 
     # collection = nearest meaningful parent (skip analysis_results / _Sustains)
